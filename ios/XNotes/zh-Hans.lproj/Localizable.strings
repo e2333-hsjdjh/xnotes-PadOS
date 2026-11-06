@@ -85,3 +85,9 @@
 "Whole page" = "整页";
 "Reorder layers" = "排序图层";
 "Layer options" = "图层选项";
+"Folder name" = "文件夹名称";
+"Folders" = "文件夹";
+"Parent folder" = "上一级";
+"New folder" = "新建文件夹";
+"Move to folder" = "移动到文件夹";
+"Delete empty folder" = "删除空文件夹";

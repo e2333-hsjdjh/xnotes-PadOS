@@ -8,13 +8,19 @@ import UniformTypeIdentifiers
 @MainActor @Observable
 final class LibraryStore {
     private(set) var notebooks: [Notebook] = []
+    private(set) var folders: [LibraryFolder] = []
+    private var folderCatalogReadable = true
     private(set) var unreadableCount = 0
     var issue: String?
-    private let directory = URL.applicationSupportDirectory.appending(path: "XNotes")
+    private let directory: URL
 
-    init() {
+    private var folderCatalog: URL { directory.appending(path: "Folders.plist") }
+
+    init(directory: URL = URL.applicationSupportDirectory.appending(path: "XNotes")) {
+        self.directory = directory
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            loadFolders()
             let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
             for file in files where file.pathExtension == "json" {
                 do {
@@ -29,6 +35,64 @@ final class LibraryStore {
         } catch {
             issue = error.localizedDescription
         }
+    }
+
+    private func loadFolders() {
+        guard FileManager.default.fileExists(atPath: folderCatalog.path) else { return }
+        do {
+            let stored = try PropertyListDecoder().decode([LibraryFolder].self, from: Data(contentsOf: folderCatalog))
+            let ids = Set(stored.map(\.id))
+            guard ids.count == stored.count else { throw CocoaError(.fileReadCorruptFile) }
+            let groups = Dictionary(grouping: stored, by: \.parentID)
+            var pending = groups[nil] ?? []
+            var visited = 0
+            while let folder = pending.popLast() {
+                visited += 1
+                pending.append(contentsOf: groups[folder.id] ?? [])
+            }
+            guard visited == stored.count else { throw CocoaError(.fileReadCorruptFile) }
+            folders = stored
+        } catch {
+            folderCatalogReadable = false
+            issue = error.localizedDescription
+        }
+    }
+
+    func saveFolder(_ folder: LibraryFolder) throws {
+        guard folderCatalogReadable,
+              folder.parentID == nil || folders.contains(where: { $0.id == folder.parentID }) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        var updated = folders
+        if let index = updated.firstIndex(where: { $0.id == folder.id }) {
+            updated[index].name = folder.name
+        } else {
+            updated.append(folder)
+        }
+        try writeFolders(updated)
+    }
+
+    func deleteFolder(_ folder: LibraryFolder) throws {
+        guard folderCatalogReadable, unreadableCount == 0,
+              !folders.contains(where: { $0.parentID == folder.id }),
+              !notebooks.contains(where: { $0.folderID == folder.id }) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        try writeFolders(folders.filter { $0.id != folder.id })
+    }
+
+    private func writeFolders(_ updated: [LibraryFolder]) throws {
+        try PropertyListEncoder().encode(updated).write(to: folderCatalog, options: .atomic)
+        folders = updated
+    }
+
+    func moveDocument(_ id: UUID, to folderID: UUID?) throws {
+        guard folderID == nil || folders.contains(where: { $0.id == folderID }),
+              var document = notebooks.first(where: { $0.id == id }) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        document.folderID = folderID
+        try save(document)
     }
 
     func save(_ notebook: Notebook) throws {
@@ -53,7 +117,7 @@ final class LibraryStore {
         return PDFDocument(url: pdfURL(digest))
     }
 
-    func importFile(_ url: URL) throws -> UUID {
+    func importFile(_ url: URL, into folderID: UUID? = nil) throws -> UUID {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: url)
@@ -78,13 +142,16 @@ final class LibraryStore {
             notebook.id = UUID()
             notebook.trashedAt = nil
         }
+        notebook.folderID = folderID
         try save(notebook)
         return notebook.id
     }
 
     func archive(for notebook: Notebook) throws -> Data {
         let pdf = try notebook.pdfDigest.map { try Data(contentsOf: pdfURL($0)) }
-        return try JSONEncoder().encode(NotebookArchive(version: 1, notebook: notebook, originalPDF: pdf))
+        var portable = notebook
+        portable.folderID = nil
+        return try JSONEncoder().encode(NotebookArchive(version: 1, notebook: portable, originalPDF: pdf))
     }
 
     private func isValid(_ notebook: Notebook) -> Bool {

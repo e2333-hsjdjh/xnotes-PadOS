@@ -5,6 +5,11 @@ struct LibraryView: View {
     @Bindable var library: LibraryStore
     @AppStorage("appearance") private var appearance = "system"
     @State private var query = ""
+    @State private var folderID: UUID?
+    @State private var folderDraft: LibraryFolder?
+    @State private var folderName = ""
+    @State private var showFolders = false
+    @State private var moveDocumentID: UUID?
     @State private var showTrash = false
     @State private var importing = false
     @State private var exporting = false
@@ -16,9 +21,19 @@ struct LibraryView: View {
     @State private var deleting: Notebook?
     @State private var title = ""
 
+    private var currentFolder: LibraryFolder? { library.folders.first { $0.id == folderID } }
+
+    private var childFolders: [LibraryFolder] {
+        guard !showTrash else { return [] }
+        return library.folders.filter { $0.parentID == currentFolder?.id }.sorted {
+            $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+    }
+
     private var documents: [Notebook] {
         library.notebooks.filter { notebook in
             (notebook.trashedAt != nil) == showTrash &&
+            (showTrash || (library.folders.contains { $0.id == notebook.folderID } ? notebook.folderID : nil) == currentFolder?.id) &&
             (query.isEmpty || notebook.title.localizedStandardContains(query) ||
                 notebook.pages.contains { $0.text.localizedStandardContains(query) })
         }.sorted { $0.modified > $1.modified }
@@ -41,7 +56,7 @@ struct LibraryView: View {
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf, .xnotesArchive]) { result in
             perform {
-                open(try library.importFile(result.get()))
+                open(try library.importFile(result.get(), into: currentFolder?.id))
             }
         }
         .fileExporter(isPresented: $exporting, document: export, contentType: exportType, defaultFilename: exportTitle) {
@@ -69,6 +84,30 @@ struct LibraryView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+        .alert("Folder name", isPresented: Binding(
+            get: { folderDraft != nil },
+            set: { if !$0 { folderDraft = nil } }
+        )) {
+            TextField("Name", text: $folderName)
+            Button("Save") {
+                guard var folder = folderDraft else { return }
+                let name = folderName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else { return }
+                folder.name = name
+                perform { try library.saveFolder(folder) }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $showFolders, onDismiss: { moveDocumentID = nil }) {
+            FolderPicker(folders: library.folders) { destination in
+                if let moveDocumentID {
+                    perform { try library.moveDocument(moveDocumentID, to: destination) }
+                } else {
+                    folderID = destination
+                    query = ""
+                }
+            }
+        }
         .confirmationDialog("Permanently delete this document?", isPresented: Binding(
             get: { deleting != nil },
             set: { if !$0 { deleting = nil } }
@@ -85,7 +124,31 @@ struct LibraryView: View {
                 if library.unreadableCount > 0 {
                     Text("Some documents could not be read. Their files were kept.")
                 }
-                if documents.isEmpty {
+                if !showTrash, let currentFolder {
+                    Button {
+                        folderID = currentFolder.parentID
+                        query = ""
+                    } label: {
+                        Label("Parent folder", systemImage: "arrow.up")
+                    }
+                }
+                ForEach(childFolders.filter { query.isEmpty || $0.name.localizedStandardContains(query) }) { folder in
+                    Button {
+                        folderID = folder.id
+                        query = ""
+                    } label: {
+                        Label(folder.name, systemImage: "folder")
+                    }
+                    .contextMenu {
+                        Button("Rename", systemImage: "pencil") { editFolder(folder) }
+                        Button("Delete empty folder", systemImage: "trash", role: .destructive) {
+                            perform { try library.deleteFolder(folder) }
+                        }
+                        .disabled(library.unreadableCount > 0 || library.folders.contains { $0.parentID == folder.id } ||
+                                  library.notebooks.contains { $0.folderID == folder.id })
+                    }
+                }
+                if documents.isEmpty && childFolders.isEmpty {
                     ContentUnavailableView(showTrash ? "Trash is empty" : "No documents", systemImage: "tray")
                 }
                 ForEach(documents) { notebook in
@@ -103,6 +166,10 @@ struct LibraryView: View {
                                 title = notebook.title
                                 renaming = notebook
                             }
+                            Button("Move to folder", systemImage: "folder") {
+                                moveDocumentID = notebook.id
+                                showFolders = true
+                            }
                             Button("Export backup", systemImage: "square.and.arrow.up") { exportNotebook(notebook) }
                             if notebook.kind != .canvas {
                                 Button("Export PDF", systemImage: "doc.richtext") { exportPDF(notebook) }
@@ -112,7 +179,7 @@ struct LibraryView: View {
                     }
                 }
             }
-            .navigationTitle(showTrash ? "Trash" : "XNotes")
+            .navigationTitle(showTrash ? Text("Trash") : Text(currentFolder?.name ?? "XNotes"))
             .searchable(text: $query)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -120,6 +187,9 @@ struct LibraryView: View {
                         Button(showTrash ? "Library" : "Trash", systemImage: showTrash ? "books.vertical" : "trash") {
                             showTrash.toggle()
                             query = ""
+                        }
+                        if !showTrash {
+                            Button("Folders", systemImage: "folder") { showFolders = true }
                         }
                         Picker("Appearance", selection: $appearance) {
                             Text("System").tag("system")
@@ -130,10 +200,14 @@ struct LibraryView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu("Add document", systemImage: "plus") {
+                        Button("New folder", systemImage: "folder.badge.plus") {
+                            editFolder(LibraryFolder(name: "", parentID: currentFolder?.id))
+                        }
                         Button("New notebook", systemImage: "book.closed") { create(.notebook) }
                         Button("New canvas", systemImage: "square.dashed") { create(.canvas) }
                         Button("Import PDF or backup", systemImage: "square.and.arrow.down") { importing = true }
                     }
+                    .disabled(showTrash)
                 }
             }
         }
@@ -174,11 +248,16 @@ struct LibraryView: View {
     }
 
     private func create(_ kind: NotebookKind) {
-        let notebook = Notebook(title: kind == .canvas ? String(localized: "Untitled canvas") : String(localized: "Untitled notebook"), kind: kind)
+        let notebook = Notebook(title: kind == .canvas ? String(localized: "Untitled canvas") : String(localized: "Untitled notebook"), kind: kind, folderID: currentFolder?.id)
         perform {
             try library.save(notebook)
             open(notebook.id)
         }
+    }
+
+    private func editFolder(_ folder: LibraryFolder) {
+        folderName = folder.name
+        folderDraft = folder
     }
 
     private func setTrashed(_ notebook: Notebook, _ trashed: Bool) {
