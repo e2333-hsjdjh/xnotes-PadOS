@@ -54,10 +54,16 @@ enum PaperPattern: String, Codable, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
+struct PageBookmark: Codable, Identifiable, Equatable {
+    var id = UUID()
+    var label: String
+}
+
 struct NotePage: Codable, Identifiable, Equatable {
     var id = UUID()
     var text = ""
     var images: [PageImage]?
+    var bookmarks: [PageBookmark]?
     var paperPattern: PaperPattern?
     var paperSize: NotebookPaperSize?
     var layers = [DrawingLayer(name: String(localized: "Layer 1"))]

@@ -228,7 +228,8 @@ final class LibraryStore {
               Set(notebook.pages.map(\.id)).count == notebook.pages.count,
               notebook.pages.allSatisfy({ page in
                   !page.layers.isEmpty && Set(page.layers.map(\.id)).count == page.layers.count &&
-                  validImages(page.images ?? []) && (page.paperSize?.isValid ?? true)
+                  validImages(page.images ?? []) && (page.paperSize?.isValid ?? true) &&
+                  Set((page.bookmarks ?? []).map(\.id)).count == (page.bookmarks ?? []).count
               }) else { return false }
         if notebook.kind == .pdf {
             guard let digest = notebook.pdfDigest else { return false }

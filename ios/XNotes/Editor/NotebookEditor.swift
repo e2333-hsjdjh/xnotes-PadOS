@@ -139,6 +139,8 @@ struct NotebookEditor<SplitChoices: View>: View {
                 editable: !readOnly && notebook.kind == .notebook,
                 pdf: pdf,
                 documentTitle: notebook.title,
+                bookmarkEditing: canEdit,
+                editBookmark: editBookmark,
                 exportPages: { ids in
                     guard let latestNotebook else { throw CocoaError(.fileReadNoSuchFile) }
                     return try NotebookPDFExport.data(for: latestNotebook, source: pdf, selecting: ids)
@@ -362,6 +364,13 @@ struct NotebookEditor<SplitChoices: View>: View {
         if edited == updated.pages { return true }
         updated.pages = edited
         return save(updated)
+    }
+
+    private func editBookmark(_ edit: BookmarkEdit, pageID: UUID) -> Bool {
+        guard canEdit, notebook.kind != .canvas else { return false }
+        return updatePage(on: pageID) { page in
+            edit.apply(to: &page)
+        }
     }
 
     private func movePages(_ indices: IndexSet, _ destination: Int) {

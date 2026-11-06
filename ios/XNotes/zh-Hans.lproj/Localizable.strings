@@ -128,3 +128,8 @@
 "Recover PDF" = "恢复 PDF";
 "Save annotation-only copy" = "另存仅批注副本";
 "%@ (Annotations)" = "%@（批注）";
+"Bookmarks" = "书签";
+"No bookmarks" = "暂无书签";
+"Add bookmark" = "添加书签";
+"Rename bookmark" = "重命名书签";
+"Remove bookmark" = "移除书签";

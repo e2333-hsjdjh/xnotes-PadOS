@@ -32,6 +32,7 @@ enum PageBatch {
             guard ids.contains(page.id) else { continue }
             var copy = page
             copy.id = UUID()
+            copy.bookmarks = nil
             if let images = copy.images {
                 copy.images = images.map {
                     var image = $0

@@ -7,6 +7,8 @@ struct PageNavigator: View {
     let editable: Bool
     let pdf: PDFDocument?
     let documentTitle: String
+    let bookmarkEditing: Bool
+    let editBookmark: (BookmarkEdit, UUID) -> Bool
     let exportPages: (Set<UUID>) throws -> Data
     let open: (UUID) -> Void
     let add: () -> Void
@@ -74,6 +76,19 @@ struct PageNavigator: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(selecting ? "Cancel selection" : "Done") {
                         if selecting { endSelection() } else { dismiss() }
+                    }
+                }
+                if !selecting {
+                    ToolbarItem(placement: .primaryAction) {
+                        NavigationLink {
+                            PageBookmarksView(pages: pages, current: current, editable: bookmarkEditing,
+                                              edit: editBookmark) { page in
+                                open(page)
+                                dismiss()
+                            }
+                        } label: {
+                            Label("Bookmarks", systemImage: "bookmark")
+                        }
                     }
                 }
                 if !outline.isEmpty {
@@ -260,6 +275,10 @@ struct PageNavigator: View {
                     }
                 }
                 Spacer()
+                if page.bookmarks?.isEmpty == false {
+                    Image(systemName: "bookmark.fill")
+                        .accessibilityLabel(Text("Bookmarks"))
+                }
                 if selecting {
                     Image(systemName: selected.contains(page.id) ? "checkmark.circle.fill" : "circle")
                 } else if page.id == current {
