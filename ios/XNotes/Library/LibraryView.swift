@@ -12,7 +12,9 @@ struct LibraryView: View {
     @State private var folderDraft: LibraryFolder?
     @State private var folderName = ""
     @State private var showFolders = false
-    @State private var moveDocumentID: UUID?
+    @State private var movingDocuments: Set<UUID> = []
+    @State private var selectingDocuments = false
+    @State private var selectedDocuments: Set<UUID> = []
     @State private var showTrash = false
     @State private var importing = false
     @State private var exporting = false
@@ -104,10 +106,10 @@ struct LibraryView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
-        .sheet(isPresented: $showFolders, onDismiss: { moveDocumentID = nil }) {
+        .sheet(isPresented: $showFolders, onDismiss: { movingDocuments = [] }) {
             FolderPicker(folders: library.folders) { destination in
-                if let moveDocumentID {
-                    perform { try library.moveDocument(moveDocumentID, to: destination) }
+                if !movingDocuments.isEmpty {
+                    applyBatch(.move(destination), to: movingDocuments)
                 } else {
                     folderID = destination
                     query = ""
@@ -140,10 +142,12 @@ struct LibraryView: View {
             }
             .navigationTitle(showTrash ? Text("Trash") : Text(currentFolder?.name ?? "XNotes"))
             .searchable(text: $query)
+            .onChange(of: folderID) { endDocumentSelection() }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu("Library options", systemImage: "line.3.horizontal") {
                         Button(showTrash ? "Library" : "Trash", systemImage: showTrash ? "books.vertical" : "trash") {
+                            endDocumentSelection()
                             showTrash.toggle()
                             query = ""
                         }
@@ -167,7 +171,15 @@ struct LibraryView: View {
                         }
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if selectingDocuments {
+                        Button("Cancel selection") { endDocumentSelection() }
+                        Button("Select all documents") { selectedDocuments.formUnion(documents.map(\.id)) }
+                            .disabled(documents.allSatisfy { selectedDocuments.contains($0.id) })
+                    } else {
+                        Button("Select documents") { selectingDocuments = true }
+                            .disabled(documents.isEmpty)
+                    }
                     Menu("Add document", systemImage: "plus") {
                         Button("New folder", systemImage: "folder.badge.plus") {
                             editFolder(LibraryFolder(name: "", parentID: currentFolder?.id))
@@ -176,7 +188,29 @@ struct LibraryView: View {
                         Button("New canvas", systemImage: "square.dashed") { create(.canvas) }
                         Button("Import PDF or backup", systemImage: "square.and.arrow.down") { importing = true }
                     }
-                    .disabled(showTrash)
+                    .disabled(showTrash || selectingDocuments)
+                }
+                if selectingDocuments {
+                    ToolbarItemGroup(placement: .bottomBar) {
+                        Text("\(selectedDocuments.count) documents selected")
+                        Spacer()
+                        if showTrash {
+                            Button("Restore selected documents", systemImage: "arrow.uturn.backward") {
+                                applyBatch(.trash(false), to: selectedDocuments)
+                            }
+                            .disabled(selectedDocuments.isEmpty)
+                        } else {
+                            Button("Move selected documents", systemImage: "folder") {
+                                movingDocuments = selectedDocuments
+                                showFolders = true
+                            }
+                            .disabled(selectedDocuments.isEmpty)
+                            Button("Trash selected documents", systemImage: "trash", role: .destructive) {
+                                applyBatch(.trash(true), to: selectedDocuments)
+                            }
+                            .disabled(selectedDocuments.isEmpty)
+                        }
+                    }
                 }
             }
         }
@@ -219,31 +253,47 @@ struct LibraryView: View {
         }
         ForEach(documents) { notebook in
             Button {
-                if !showTrash { open(notebook.id) }
+                if selectingDocuments {
+                    if selectedDocuments.remove(notebook.id) == nil { selectedDocuments.insert(notebook.id) }
+                } else if !showTrash {
+                    open(notebook.id)
+                }
             } label: {
-                entryLabel(Text(verbatim: notebook.title), symbol: notebook.kind.symbol)
+                entryLabel(Text(verbatim: notebook.title), symbol: documentSymbol(notebook))
             }
+            .accessibilityAddTraits(selectingDocuments && selectedDocuments.contains(notebook.id) ? .isSelected : [])
             .contextMenu {
-                if showTrash {
-                    Button("Restore", systemImage: "arrow.uturn.backward") { setTrashed(notebook, false) }
-                    Button("Delete permanently", systemImage: "trash", role: .destructive) { deleting = notebook }
-                } else {
-                    Button("Rename", systemImage: "pencil") {
-                        title = notebook.title
-                        renaming = notebook
-                    }
-                    Button("Move to folder", systemImage: "folder") {
-                        moveDocumentID = notebook.id
-                        showFolders = true
-                    }
-                    Button("Export backup", systemImage: "square.and.arrow.up") { exportNotebook(notebook) }
-                    if notebook.kind != .canvas {
-                        Button("Export PDF", systemImage: "doc.richtext") { exportPDF(notebook) }
-                    }
-                    Button("Move to Trash", systemImage: "trash", role: .destructive) { setTrashed(notebook, true) }
+                if !selectingDocuments {
+                    documentActions(notebook)
                 }
             }
         }
+    }
+
+    @ViewBuilder private func documentActions(_ notebook: Notebook) -> some View {
+        if showTrash {
+            Button("Restore", systemImage: "arrow.uturn.backward") { setTrashed(notebook, false) }
+            Button("Delete permanently", systemImage: "trash", role: .destructive) { deleting = notebook }
+        } else {
+            Button("Rename", systemImage: "pencil") {
+                title = notebook.title
+                renaming = notebook
+            }
+            Button("Move to folder", systemImage: "folder") {
+                movingDocuments = [notebook.id]
+                showFolders = true
+            }
+            Button("Export backup", systemImage: "square.and.arrow.up") { exportNotebook(notebook) }
+            if notebook.kind != .canvas {
+                Button("Export PDF", systemImage: "doc.richtext") { exportPDF(notebook) }
+            }
+            Button("Move to Trash", systemImage: "trash", role: .destructive) { setTrashed(notebook, true) }
+        }
+    }
+
+    private func documentSymbol(_ notebook: Notebook) -> String {
+        if !selectingDocuments { return notebook.kind.symbol }
+        return selectedDocuments.contains(notebook.id) ? "checkmark.circle.fill" : "circle"
     }
 
     @ViewBuilder private func entryLabel(_ title: Text, symbol: String) -> some View {
@@ -310,6 +360,20 @@ struct LibraryView: View {
     private func editFolder(_ folder: LibraryFolder) {
         folderName = folder.name
         folderDraft = folder
+    }
+
+    private func endDocumentSelection() {
+        selectingDocuments = false
+        selectedDocuments = []
+    }
+
+    private func applyBatch(_ change: LibraryStore.DocumentChange, to ids: Set<UUID>) {
+        let result = library.changeDocuments(ids, applying: change)
+        selectedDocuments.subtract(result.saved)
+        if selectingDocuments && selectedDocuments.isEmpty { endDocumentSelection() }
+        if let detail = result.failures.values.sorted().first {
+            library.issue = String(localized: "\(result.failures.count) documents could not be updated. \(detail)")
+        }
     }
 
     private func setTrashed(_ notebook: Notebook, _ trashed: Bool) {

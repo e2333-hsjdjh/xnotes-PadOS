@@ -133,3 +133,10 @@
 "Add bookmark" = "添加书签";
 "Rename bookmark" = "重命名书签";
 "Remove bookmark" = "移除书签";
+"Select documents" = "选择文档";
+"Select all documents" = "选择全部文档";
+"%lld documents selected" = "已选择 %lld 份文档";
+"Restore selected documents" = "恢复所选文档";
+"Move selected documents" = "移动所选文档";
+"Trash selected documents" = "将所选文档移到回收站";
+"%lld documents could not be updated. %@" = "%lld 份文档未能更新。%@";

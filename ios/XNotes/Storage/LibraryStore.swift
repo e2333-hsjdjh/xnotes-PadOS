@@ -96,6 +96,41 @@ final class LibraryStore {
         try save(document)
     }
 
+    enum DocumentChange {
+        case move(UUID?)
+        case trash(Bool)
+    }
+
+    struct BatchResult {
+        var saved: Set<UUID> = []
+        var failures: [UUID: String] = [:]
+    }
+
+    func changeDocuments(_ ids: Set<UUID>, applying change: DocumentChange) -> BatchResult {
+        var result = BatchResult()
+        let timestamp = Date()
+        for id in ids {
+            do {
+                switch change {
+                case .move(let folderID):
+                    try moveDocument(id, to: folderID)
+                case .trash(let trashed):
+                    guard var notebook = notebooks.first(where: { $0.id == id }) else {
+                        throw CocoaError(.fileNoSuchFile)
+                    }
+                    if (notebook.trashedAt != nil) != trashed {
+                        notebook.trashedAt = trashed ? timestamp : nil
+                        try save(notebook)
+                    }
+                }
+                result.saved.insert(id)
+            } catch {
+                result.failures[id] = error.localizedDescription
+            }
+        }
+        return result
+    }
+
     func save(_ notebook: Notebook) throws {
         var updated = notebook
         updated.modified = .now
