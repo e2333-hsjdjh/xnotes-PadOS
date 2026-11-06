@@ -2,6 +2,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct LibraryView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("trashRetentionDays") private var trashRetention = TrashRetention.untilEmptied
+    @State private var pendingRetention: TrashRetention?
     @Environment(\.colorScheme) private var scheme
     @Bindable var library: LibraryStore
     @AppStorage("appearance") private var appearance = "system"
@@ -24,6 +27,7 @@ struct LibraryView: View {
     @State private var panes: [DocumentPane] = []
     @State private var renaming: Notebook?
     @State private var deleting: Set<UUID> = []
+    @State private var deleteWithoutTrash = false
     @State private var title = ""
 
     private var currentFolder: LibraryFolder? { library.folders.first { $0.id == folderID } }
@@ -124,6 +128,18 @@ struct LibraryView: View {
                 }
             }
         }
+        .onAppear { purgeExpiredTrash() }
+        .onChange(of: scenePhase) { if scenePhase == .active { purgeExpiredTrash() } }
+        .onChange(of: trashRetention) { purgeExpiredTrash() }
+        .alert("Change trash retention?", isPresented: Binding(
+            get: { pendingRetention != nil },
+            set: { if !$0 { pendingRetention = nil } }
+        ), presenting: pendingRetention) { option in
+            Button("Apply") { trashRetention = option }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("Documents already past the new retention limit will be permanently deleted.")
+        }
         .confirmationDialog(
             Text("Permanently delete \(deleting.count) documents?"),
             isPresented: Binding(
@@ -134,7 +150,7 @@ struct LibraryView: View {
             presenting: deleting
         ) { ids in
             Button("Delete permanently", role: .destructive) {
-                applyBatch(.deletePermanently, to: ids)
+                applyBatch(deleteWithoutTrash ? .deleteWithoutTrash : .deletePermanently, to: ids)
                 deleting = []
             }
         }
@@ -163,6 +179,7 @@ struct LibraryView: View {
                         Button(showTrash ? "Library" : "Trash", systemImage: showTrash ? "books.vertical" : "trash") {
                             endDocumentSelection()
                             showTrash.toggle()
+                            if showTrash { purgeExpiredTrash() }
                             query = ""
                         }
                         if !showTrash {
@@ -178,6 +195,23 @@ struct LibraryView: View {
                             Text("Date created").tag(LibrarySort.created)
                         }
                         Toggle("Descending order", isOn: $descending)
+                        Menu("Trash retention") {
+                            ForEach(TrashRetention.allCases, id: \.self) { option in
+                                Button {
+                                    if option.rawValue > 0 && option != trashRetention {
+                                        pendingRetention = option
+                                    } else {
+                                        trashRetention = option
+                                    }
+                                } label: {
+                                    if option == trashRetention {
+                                        Label(option.title, systemImage: "checkmark")
+                                    } else {
+                                        Text(option.title)
+                                    }
+                                }
+                            }
+                        }
                         Picker("Appearance", selection: $appearance) {
                             Text("System").tag("system")
                             Text("Light").tag("light")
@@ -214,7 +248,7 @@ struct LibraryView: View {
                             }
                             .disabled(selectedDocuments.isEmpty)
                             Button("Delete selected permanently", systemImage: "trash", role: .destructive) {
-                                deleting = selectedDocuments
+                                requestDeletion(selectedDocuments, bypassTrash: false)
                             }
                             .disabled(selectedDocuments.isEmpty)
                         } else {
@@ -227,8 +261,9 @@ struct LibraryView: View {
                             }
                             .disabled(selectedDocuments.isEmpty ||
                                       selectedForPDF.count != selectedDocuments.count)
-                            Button("Trash selected documents", systemImage: "trash", role: .destructive) {
-                                applyBatch(.trash(true), to: selectedDocuments)
+                            Button(trashRetention == .off ? "Delete selected permanently" : "Trash selected documents",
+                                   systemImage: "trash", role: .destructive) {
+                                removeFromLibrary(selectedDocuments)
                             }
                             .disabled(selectedDocuments.isEmpty)
                         }
@@ -297,8 +332,8 @@ struct LibraryView: View {
 
     @ViewBuilder private func documentActions(_ notebook: Notebook) -> some View {
         if showTrash {
-            Button("Restore", systemImage: "arrow.uturn.backward") { setTrashed(notebook, false) }
-            Button("Delete permanently", systemImage: "trash", role: .destructive) { deleting = [notebook.id] }
+            Button("Restore", systemImage: "arrow.uturn.backward") { applyBatch(.trash(false), to: [notebook.id]) }
+            Button("Delete permanently", systemImage: "trash", role: .destructive) { requestDeletion([notebook.id], bypassTrash: false) }
         } else {
             Button("Rename", systemImage: "pencil") {
                 title = notebook.title
@@ -309,7 +344,8 @@ struct LibraryView: View {
             }
             Button("Export backup", systemImage: "square.and.arrow.up") { exportNotebook(notebook) }
             Button("Export PDF", systemImage: "doc.richtext") { exportPDF(notebook) }
-            Button("Move to Trash", systemImage: "trash", role: .destructive) { setTrashed(notebook, true) }
+            Button(trashRetention == .off ? "Delete permanently" : "Move to Trash",
+                   systemImage: "trash", role: .destructive) { removeFromLibrary([notebook.id]) }
         }
     }
 
@@ -404,10 +440,25 @@ struct LibraryView: View {
         }
     }
 
-    private func setTrashed(_ notebook: Notebook, _ trashed: Bool) {
-        var updated = notebook
-        updated.trashedAt = trashed ? .now : nil
-        perform { try library.save(updated) }
+    private func removeFromLibrary(_ ids: Set<UUID>) {
+        if trashRetention == .off {
+            requestDeletion(ids, bypassTrash: true)
+        } else {
+            applyBatch(.trash(true), to: ids)
+        }
+    }
+
+    private func requestDeletion(_ ids: Set<UUID>, bypassTrash: Bool) {
+        deleteWithoutTrash = bypassTrash
+        deleting = ids
+    }
+
+    private func purgeExpiredTrash() {
+        let result = library.purgeExpiredTrash(days: trashRetention.rawValue)
+        selectedDocuments.subtract(result.saved)
+        if let detail = result.failures.values.sorted().first {
+            library.issue = String(localized: "\(result.failures.count) documents could not be updated. \(detail)")
+        }
     }
 
     private func exportNotebook(_ notebook: Notebook) {
@@ -454,4 +505,20 @@ private struct FolderRequest: Identifiable {
 
     let id = UUID()
     let action: Action
+}
+
+private enum TrashRetention: Int, CaseIterable {
+    case off = 0
+    case week = 7
+    case month = 30
+    case untilEmptied = -1
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .off: "Trash off"
+        case .week: "7 days"
+        case .month: "30 days"
+        case .untilEmptied: "Until manually emptied"
+        }
+    }
 }

@@ -24,6 +24,6 @@
 | `pen/`、`PenShortcutSettings` | PencilKit 输入、可切换仅 Apple Pencil | iPad 可用手势映射、真机压感、延迟、防误触与取消验收 |
 | `DocumentCodec`、`CanvasCodec`、`BundleIdentity` | iOS 版本化 `.xnotes` 备份 | Android `.xnote` 格式互通、旧版迁移及身份恢复 |
 
-PDF 原件和批注分开保存。导出备份包含两者。当前回收站支持手动永久删除一份或多份文档，PDF 原件暂时保留。
+PDF 原件和批注分开保存。导出备份包含两者。当前回收站支持单份或批量永久删除，可设置保留期限，PDF 原件暂时保留。
 
 上游授权见仓库根目录的 [MIT 许可证](../LICENSE)。

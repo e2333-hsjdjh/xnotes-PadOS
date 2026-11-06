@@ -116,6 +116,7 @@ final class LibraryStore {
         case move(UUID?)
         case trash(Bool)
         case deletePermanently
+        case deleteWithoutTrash
     }
 
     struct BatchResult {
@@ -130,7 +131,9 @@ final class LibraryStore {
             do {
                 switch change {
                 case .deletePermanently:
-                    try deleteTrashedDocument(id)
+                    try deleteDocument(id, requiresTrash: true)
+                case .deleteWithoutTrash:
+                    try deleteDocument(id, requiresTrash: false)
                 case .move(let folderID):
                     try moveDocument(id, to: folderID)
                 case .trash(let trashed):
@@ -162,8 +165,17 @@ final class LibraryStore {
         }
     }
 
-    private func deleteTrashedDocument(_ id: UUID) throws {
-        guard notebooks.contains(where: { $0.id == id && $0.trashedAt != nil }) else {
+    func purgeExpiredTrash(days: Int, now: Date = .now) -> BatchResult {
+        guard (1...365).contains(days) else { return BatchResult() }
+        let cutoff = now.addingTimeInterval(-Double(days) * 86_400)
+        let expired = notebooks.compactMap { document in
+            document.trashedAt.map { $0 <= cutoff } == true ? document.id : nil
+        }
+        return changeDocuments(Set(expired), applying: .deletePermanently)
+    }
+
+    private func deleteDocument(_ id: UUID, requiresTrash: Bool) throws {
+        guard notebooks.contains(where: { $0.id == id && ($0.trashedAt != nil) == requiresTrash }) else {
             throw CocoaError(.fileNoSuchFile)
         }
         let file = directory.appending(path: "\(id.uuidString).json")
