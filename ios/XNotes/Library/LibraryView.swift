@@ -128,8 +128,8 @@ struct LibraryView: View {
                 }
             }
         }
-        .onAppear { purgeExpiredTrash() }
-        .onChange(of: scenePhase) { if scenePhase == .active { purgeExpiredTrash() } }
+        .onAppear { maintainStorage() }
+        .onChange(of: scenePhase) { if scenePhase == .active { maintainStorage() } }
         .onChange(of: trashRetention) { purgeExpiredTrash() }
         .alert("Change trash retention?", isPresented: Binding(
             get: { pendingRetention != nil },
@@ -151,6 +151,7 @@ struct LibraryView: View {
         ) { ids in
             Button("Delete permanently", role: .destructive) {
                 applyBatch(deleteWithoutTrash ? .deleteWithoutTrash : .deletePermanently, to: ids)
+                collectPDFs()
                 deleting = []
             }
         }
@@ -451,6 +452,19 @@ struct LibraryView: View {
     private func requestDeletion(_ ids: Set<UUID>, bypassTrash: Bool) {
         deleteWithoutTrash = bypassTrash
         deleting = ids
+    }
+
+    private func maintainStorage() {
+        purgeExpiredTrash()
+        collectPDFs()
+    }
+
+    private func collectPDFs() {
+        do {
+            try library.sweepUnreferencedPDFs()
+        } catch {
+            if library.issue == nil { library.issue = error.localizedDescription }
+        }
     }
 
     private func purgeExpiredTrash() {

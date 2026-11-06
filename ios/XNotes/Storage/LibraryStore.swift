@@ -14,11 +14,14 @@ final class LibraryStore {
     var issue: String?
     private(set) var pdfRestorationRevision = 0
     private let directory: URL
+    private let pdfResources: PDFResourceCollector
+    private var documentScanCompleted = false
 
     private var folderCatalog: URL { directory.appending(path: "Folders.plist") }
 
     init(directory: URL = URL.applicationSupportDirectory.appending(path: "XNotes")) {
         self.directory = directory
+        pdfResources = PDFResourceCollector(directory: directory)
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             loadFolders()
@@ -33,6 +36,7 @@ final class LibraryStore {
                     unreadableCount += 1
                 }
             }
+            documentScanCompleted = true
         } catch {
             issue = error.localizedDescription
         }
@@ -155,6 +159,10 @@ final class LibraryStore {
 
     func save(_ notebook: Notebook) throws {
         var updated = notebook
+        if let digest = updated.pdfDigest,
+           !notebooks.contains(where: { $0.id == updated.id && $0.pdfDigest == digest }) {
+            try pdfResources.protect(digest)
+        }
         updated.modified = .now
         let file = directory.appending(path: "\(updated.id.uuidString).json")
         try JSONEncoder().encode(updated).write(to: file, options: .atomic)
@@ -190,7 +198,14 @@ final class LibraryStore {
         guard let digest = notebook.pdfDigest,
               let document = PDFDocument(url: pdfURL(digest)), !document.isLocked,
               document.pageCount == notebook.pages.count else { return nil }
+        pdfResources.track(document, digest: digest)
         return document
+    }
+
+    @discardableResult
+    func sweepUnreferencedPDFs(now: Date = .now) throws -> Set<String> {
+        guard documentScanCompleted, unreadableCount == 0 else { return [] }
+        return try pdfResources.sweep(referenced: Set(notebooks.compactMap(\.pdfDigest)), now: now)
     }
 
     func restoreOriginalPDF(for documentID: UUID, from url: URL) throws {
@@ -306,9 +321,7 @@ final class LibraryStore {
               }) else { return false }
         if notebook.kind == .pdf {
             guard let digest = notebook.pdfDigest else { return false }
-            return digest.utf8.count == 64 && digest.utf8.allSatisfy { byte in
-                (48...57).contains(byte) || (97...102).contains(byte)
-            }
+            return PDFResourceCollector.isDigest(digest)
         }
         return notebook.pdfDigest == nil && (notebook.kind != .canvas || notebook.pages.count == 1)
     }
