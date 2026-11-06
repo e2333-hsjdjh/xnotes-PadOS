@@ -222,11 +222,22 @@ final class LibraryStore {
         return document
     }
 
-    func insertedPDFPages(from url: URL) throws -> [NotePage] {
+    struct PDFInsertion {
+        let data: Data
+        let document: PDFDocument
+    }
+
+    func preparePDFInsertion(from url: URL) throws -> PDFInsertion {
         let data = try readFile(url)
-        let pdf = try readablePDF(data)
-        let hash = try preservePDF(data)
-        return (0..<pdf.pageCount).map { index in
+        return PDFInsertion(data: data, document: try readablePDF(data))
+    }
+
+    func insertedPDFPages(from source: PDFInsertion, selecting indices: IndexSet) throws -> [NotePage] {
+        guard !indices.isEmpty, let last = indices.last, last < source.document.pageCount else {
+            throw CocoaError(.fileReadNoSuchFile)
+        }
+        let hash = try preservePDF(source.data)
+        return indices.map { index in
             NotePage(pdfBackground: PDFPageReference(digest: hash, index: index))
         }
     }

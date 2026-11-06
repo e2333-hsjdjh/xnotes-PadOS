@@ -187,3 +187,5 @@
 "Export backups" = "导出备份文件";
 "File size" = "文件大小";
 "Insert PDF pages" = "插入 PDF 页面";
+"Clear page selection" = "清除页面选择";
+"Insert %lld pages" = "插入 %lld 页";

@@ -66,6 +66,13 @@ struct NotebookEditor<SplitChoices: View>: View {
     }
 
     @State private var fileImport: FileImport = .originalPDF
+    private struct PDFInsertRequest: Identifiable {
+        let id = UUID()
+        let targetID: UUID
+        let source: LibraryStore.PDFInsertion
+    }
+
+    @State private var pdfInsertRequest: PDFInsertRequest?
     @State private var showingFileImporter = false
     @State private var showingPhotoPicker = false
     @State private var pdf: PDFDocument?
@@ -206,6 +213,11 @@ struct NotebookEditor<SplitChoices: View>: View {
                 editPaper: editPaper,
                 move: movePages
             )
+        }
+        .sheet(item: $pdfInsertRequest) { request in
+            PDFInsertPicker(document: request.source.document) { indices in
+                insertPDF(request, indices: indices)
+            }
         }
         .sheet(item: $cropRequest) { request in
             PageImageCropView(image: request.image) { region in
@@ -633,14 +645,9 @@ struct NotebookEditor<SplitChoices: View>: View {
                 try library.restoreOriginalPDF(for: notebook.id, from: url)
                 reloadPDF()
             case .insertPDF(let targetID):
-                guard canEdit, notebook.kind == .notebook, var updated = latestNotebook,
-                      let index = updated.pages.firstIndex(where: { $0.id == targetID }) else { return }
-                let inserted = try library.insertedPDFPages(from: url)
-                updated.pages.insert(contentsOf: inserted, at: index + 1)
-                if save(updated) {
-                    retainPagePDFs()
-                    selectedPageID = inserted.first?.id
-                }
+                guard canEdit, notebook.kind == .notebook else { return }
+                let source = try library.preparePDFInsertion(from: url)
+                pdfInsertRequest = PDFInsertRequest(targetID: targetID, source: source)
             case .image(let targetID, let size):
                 guard canEdit else { return }
                 let image = try PageImageView.prepare(url, for: size)
@@ -648,6 +655,25 @@ struct NotebookEditor<SplitChoices: View>: View {
             }
         } catch {
             library.issue = error.localizedDescription
+        }
+    }
+
+    private func insertPDF(_ request: PDFInsertRequest, indices: IndexSet) -> Bool {
+        guard canEdit, notebook.kind == .notebook, var updated = latestNotebook,
+              let index = updated.pages.firstIndex(where: { $0.id == request.targetID }) else {
+            library.issue = CocoaError(.fileReadNoSuchFile).localizedDescription
+            return false
+        }
+        do {
+            let inserted = try library.insertedPDFPages(from: request.source, selecting: indices)
+            updated.pages.insert(contentsOf: inserted, at: index + 1)
+            guard save(updated) else { return false }
+            retainPagePDFs()
+            selectedPageID = inserted.first?.id
+            return true
+        } catch {
+            library.issue = error.localizedDescription
+            return false
         }
     }
 
