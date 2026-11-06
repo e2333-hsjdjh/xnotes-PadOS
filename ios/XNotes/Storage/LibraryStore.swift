@@ -255,22 +255,45 @@ final class LibraryStore {
               notebook.kind == .pdf, let expected = notebook.pdfDigest else {
             throw CocoaError(.fileNoSuchFile)
         }
+        let candidate = try recoveryPDF(from: url, expected: expected)
+        guard try pageCount(candidate) == notebook.pages.count else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        try publishRecoveredPDF(candidate, digest: expected)
+    }
+
+    func restorePagePDF(for documentID: UUID, pageID: UUID, from url: URL) throws {
+        guard let notebook = notebooks.first(where: { $0.id == documentID }),
+              let reference = notebook.pages.first(where: { $0.id == pageID })?.pdfBackground else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let candidate = try recoveryPDF(from: url, expected: reference.digest)
+        let count = try pageCount(candidate)
+        let matching = notebook.pages.compactMap(\.pdfBackground).filter { $0.digest == reference.digest }
+        guard matching.allSatisfy({ (0..<count).contains($0.index) }) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        try publishRecoveredPDF(candidate, digest: reference.digest)
+    }
+
+    private func recoveryPDF(from url: URL, expected: String) throws -> Data {
         let contents = try readFile(url)
         let candidate: Data
         if url.pathExtension.lowercased() == "pdf" {
             candidate = contents
         } else {
             let archive = try JSONDecoder().decode(NotebookArchive.self, from: contents)
-            guard archive.version == 1, let original = archive.originalPDF else {
+            guard (1...2).contains(archive.version),
+                  let original = archive.pagePDFs?[expected] ?? archive.originalPDF else {
                 throw PDFRecoveryError.missingOriginal
             }
             candidate = original
         }
         guard digest(candidate) == expected else { throw PDFRecoveryError.differentOriginal }
-        guard try pageCount(candidate) == notebook.pages.count else {
-            throw CocoaError(.fileReadCorruptFile)
-        }
+        return candidate
+    }
 
+    private func publishRecoveredPDF(_ candidate: Data, digest expected: String) throws {
         let destination = pdfURL(expected)
         if (try? Data(contentsOf: destination, options: .mappedIfSafe)) != candidate {
             try candidate.write(to: destination, options: .atomic)

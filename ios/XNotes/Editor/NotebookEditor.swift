@@ -53,12 +53,13 @@ struct NotebookEditor<SplitChoices: View>: View {
     @State private var layerName = ""
     private enum FileImport {
         case originalPDF
+        case pagePDF(UUID)
         case insertPDF(after: UUID)
         case image(pageID: UUID, size: CGSize)
 
         var contentTypes: [UTType] {
             switch self {
-            case .originalPDF: [.pdf, .xnotesArchive]
+            case .originalPDF, .pagePDF: [.pdf, .xnotesArchive]
             case .insertPDF: [.pdf]
             case .image: [.image]
             }
@@ -93,7 +94,8 @@ struct NotebookEditor<SplitChoices: View>: View {
     private var viewStateSlot: DocumentViewStateStore.Slot { readOnly ? .secondary : .primary }
     private var pdfSources: PDFPageSources { PDFPageSources(original: pdf, inserted: pagePDFs) }
     private var currentPDFPage: PDFPage? { pdfSources.page(for: page, at: pageIndex) }
-    private var canEdit: Bool { !readOnly && (notebook.kind != .pdf || pdf != nil) }
+    private var missingPagePDF: Bool { page.pdfBackground != nil && currentPDFPage == nil }
+    private var canEdit: Bool { !readOnly && !missingPagePDF && (notebook.kind != .pdf || pdf != nil) }
     private var darkPaper: Bool { scheme == .dark && notebook.kind != .pdf && page.pdfBackground == nil }
     private var paperSize: CGSize {
         if let pdfImage { return pdfImage.size }
@@ -119,6 +121,18 @@ struct NotebookEditor<SplitChoices: View>: View {
                                 library.issue = error.localizedDescription
                             }
                         }
+                    }
+                    .frame(minHeight: 48)
+                }
+                .padding(.horizontal, 8)
+                Divider()
+            }
+            if missingPagePDF {
+                HStack {
+                    Text("Original PDF unavailable").font(.subheadline)
+                    Spacer()
+                    Button("Relink original PDF", systemImage: "link") {
+                        showFileImporter(for: .pagePDF(page.id))
                     }
                     .frame(minHeight: 48)
                 }
@@ -160,6 +174,11 @@ struct NotebookEditor<SplitChoices: View>: View {
         .onChange(of: zoom) { saveViewState() }
         .onChange(of: library.pdfRestorationRevision) {
             if notebook.kind == .pdf && pdf == nil { reloadPDF() }
+            if missingPagePDF, let reference = page.pdfBackground {
+                pagePDFs[reference.digest] = library.pagePDF(for: reference.digest)
+            }
+            retainPagePDFs()
+            loadBackground()
         }
         .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: fileImport.contentTypes,
                       onCompletion: importFile)
@@ -646,6 +665,8 @@ struct NotebookEditor<SplitChoices: View>: View {
             case .originalPDF:
                 try library.restoreOriginalPDF(for: notebook.id, from: url)
                 reloadPDF()
+            case .pagePDF(let pageID):
+                try library.restorePagePDF(for: notebook.id, pageID: pageID, from: url)
             case .insertPDF(let targetID):
                 guard canEdit, notebook.kind == .notebook else { return }
                 let source = try library.preparePDFInsertion(from: url)
