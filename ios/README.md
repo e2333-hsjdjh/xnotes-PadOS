@@ -17,7 +17,7 @@
 | `ExplorerView`、`NewNoteScreen`、`TrashPane`、`SearchTab` | 文档列表、标题和正文搜索、创建、重命名、回收站 | 文件夹树、多选、排序、视图切换、回收站期限和文档内搜索 |
 | `Editor`、`Toolbar`、`SidePanel` | 分页、页面列表与正文搜索、插入、复制、删除和排序笔记页、笔、荧光笔、橡皮、套索、当前图层笔迹撤销重做、基础文字和照片插入、移动、缩放与删除 | 页面缩略图、多选、页面操作撤销、模板、视图设置、富文本、图层内对象混排、图片裁剪和文件插入、其他插入与编辑工具、工具栏自定义 |
 | `InfiniteEditor`、`InfiniteToolbar` | 2048 × 2048 可滚动书写区域 | 无限坐标、缩放、路径点、导航缩略图和画布专用工具 |
-| `PdfResources`、`PdfMarkups`、`BundlePdf` | PDF 导入、分页显示、笔迹叠加、按 SHA-256 共享原件、包含原件的 iOS 备份、导出含可见笔迹与页面内容的 PDF | 原生文字标注、目录、批处理、合并、PDF 链接与交互对象保留、原件恢复与回收、扫描 PDF 性能验证 |
+| `PdfResources`、`PdfMarkups`、`BundlePdf` | PDF 导入、分页显示、原文查找、目录跳转、笔迹叠加、按 SHA-256 共享原件、包含原件的 iOS 备份、导出含可见笔迹与页面内容的 PDF | 原生文字标注、匹配位置高亮、批处理、合并、PDF 链接与交互对象保留、原件恢复与回收、扫描 PDF 性能验证 |
 | `LayersPanel` | 侧栏、每页图层、选层、增删、命名、显隐、锁定、菜单排序 | 缩略图、拖动排序、图层操作撤销、跨图层移动、切换页面后的历史 |
 | `SplitDocumentPicker`、`PaneHomeState` | 两份文档并排 | 同文档双视图、窗格首页、共享工具栏和焦点路由、布局恢复 |
 | `AskAi`、`AiSessions`、`PreferencesPane` | 外观切换 | AI 会话、供应商、Keychain、模型工具、截图和 PDF 附件，其他设置及帮助页面 |

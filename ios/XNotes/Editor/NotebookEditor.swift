@@ -84,6 +84,7 @@ struct NotebookEditor<SplitChoices: View>: View {
                 pages: notebook.pages,
                 current: page.id,
                 editable: notebook.kind == .notebook,
+                pdf: pdf,
                 open: { selectedPageID = $0 },
                 add: addPage,
                 duplicate: duplicatePage,
