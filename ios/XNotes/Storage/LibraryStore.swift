@@ -14,6 +14,7 @@ final class LibraryStore {
     var issue: String?
     private(set) var pdfRestorationRevision = 0
     private let directory: URL
+    let viewStates: DocumentViewStateStore
     private let pdfResources: PDFResourceCollector
     private var documentScanCompleted = false
 
@@ -22,6 +23,7 @@ final class LibraryStore {
     init(directory: URL = URL.applicationSupportDirectory.appending(path: "XNotes")) {
         self.directory = directory
         pdfResources = PDFResourceCollector(directory: directory)
+        viewStates = DocumentViewStateStore(directory: directory.appending(path: "ViewStates"))
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             loadFolders()
@@ -192,6 +194,7 @@ final class LibraryStore {
         }
         try FileManager.default.removeItem(at: file)
         notebooks.removeAll { $0.id == id }
+        viewStates.remove(id)
     }
 
     func pdf(for notebook: Notebook) -> PDFDocument? {

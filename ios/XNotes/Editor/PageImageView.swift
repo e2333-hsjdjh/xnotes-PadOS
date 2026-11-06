@@ -19,7 +19,7 @@ struct PageImageView: View {
                     .overlay { Rectangle().strokeBorder(.white, lineWidth: 3) }
                     .overlay { Rectangle().strokeBorder(.black, style: StrokeStyle(lineWidth: 1, dash: [4])) }
                     .contentShape(Rectangle())
-                    .gesture(DragGesture(coordinateSpace: .named(PaperZoom.coordinateSpace))
+                    .gesture(DragGesture(coordinateSpace: .named(PaperCoordinates.name))
                         .updating($translation) { value, translation, _ in translation = value.translation }
                         .onEnded { move(positioned($0.translation)) })
                     .contextMenu {

@@ -16,6 +16,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     @State private var selectedPageID: UUID?
     @State private var showPages = false
     @State private var zoom = PaperZoom()
+    @State private var restoredViewState = false
     @State private var showPaper = false
     @State private var showPaperSize = false
     @State private var selectedLayer: UUID?
@@ -103,7 +104,17 @@ struct NotebookEditor<SplitChoices: View>: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { reloadPDF() }
+        .onAppear {
+            if !restoredViewState {
+                if let state = library.viewStates.load(notebook.id) {
+                    selectedPageID = state.page(in: notebook.pages)
+                    zoom = state.zoom
+                }
+                restoredViewState = true
+            }
+            reloadPDF()
+        }
+        .onChange(of: zoom) { saveViewState() }
         .onChange(of: library.pdfRestorationRevision) {
             if notebook.kind == .pdf && pdf == nil { reloadPDF() }
         }
@@ -117,7 +128,7 @@ struct NotebookEditor<SplitChoices: View>: View {
         }
         .onDisappear { imageImport?.cancel() }
         .onChange(of: readOnly) {
-            guard readOnly else { return }
+            guard readOnly else { saveViewState(); return }
             history.clear()
             imageImport?.cancel()
             imageSelection = nil
@@ -136,6 +147,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             layerEditMode = .inactive
             editingImages = false
             loadBackground()
+            saveViewState()
         }
         .sheet(isPresented: $showPages) {
             PageNavigator(
@@ -528,6 +540,16 @@ struct NotebookEditor<SplitChoices: View>: View {
             } catch {
                 if !Task.isCancelled { library.issue = error.localizedDescription }
             }
+        }
+    }
+
+    private func saveViewState() {
+        guard restoredViewState, !readOnly,
+              library.notebooks.contains(where: { $0.id == notebook.id && $0.trashedAt == nil }) else { return }
+        do {
+            try library.viewStates.save(DocumentViewState(pageID: page.id, zoom: zoom), for: notebook.id)
+        } catch {
+            if library.issue == nil { library.issue = error.localizedDescription }
         }
     }
 
