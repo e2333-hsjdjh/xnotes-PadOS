@@ -13,6 +13,8 @@ struct NotebookEditor<SplitChoices: View>: View {
     @ViewBuilder let splitChoices: () -> SplitChoices
 
     @Environment(\.colorScheme) private var scheme
+    @State private var pdfMatchPage: UUID?
+    @State private var pdfMatchRects: [CGRect] = []
     @State private var selectedPageID: UUID?
     @State private var showPages = false
     @State private var zoom = PaperZoom()
@@ -149,6 +151,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             layerEditMode = .inactive
             editingImages = false
             loadBackground()
+            if pdfMatchPage != page.id { clearPDFMatches() }
             saveViewState()
         }
         .sheet(isPresented: $showPages) {
@@ -164,7 +167,11 @@ struct NotebookEditor<SplitChoices: View>: View {
                     guard let latestNotebook else { throw CocoaError(.fileReadNoSuchFile) }
                     return try NotebookPDFExport.data(for: latestNotebook, source: pdf, selecting: ids)
                 },
-                open: { selectedPageID = $0 },
+                open: { id in
+                    clearPDFMatches()
+                    selectedPageID = id
+                },
+                openPDFMatch: showPDFMatches,
                 add: addPage,
                 duplicate: duplicatePages,
                 delete: deletePages,
@@ -340,6 +347,17 @@ struct NotebookEditor<SplitChoices: View>: View {
                     LayerImage(ink: layer.ink, darkPaper: darkPaper)
                         .allowsHitTesting(false)
                 }
+            }
+            if pdfMatchPage == pageID && !pdfMatchRects.isEmpty {
+                Canvas { context, _ in
+                    var outline = Path()
+                    for rect in pdfMatchRects { outline.addRect(rect.insetBy(dx: -1, dy: -1)) }
+                    context.fill(outline, with: .color(.gray.opacity(0.16)))
+                    context.stroke(outline, with: .color(.white), lineWidth: 3)
+                    context.stroke(outline, with: .color(.black), lineWidth: 1)
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
             }
             if editingImages && !readOnly {
                 ForEach(page.images ?? []) { image in
@@ -543,6 +561,21 @@ struct NotebookEditor<SplitChoices: View>: View {
                 if !Task.isCancelled { library.issue = error.localizedDescription }
             }
         }
+    }
+
+    private func showPDFMatches(_ pageID: UUID, query: String) {
+        clearPDFMatches()
+        selectedPageID = pageID
+        guard let index = notebook.pages.firstIndex(where: { $0.id == pageID }),
+              let original = pdf?.page(at: index),
+              let size = try? PDFPageGeometry.displaySize(original) else { return }
+        pdfMatchPage = pageID
+        pdfMatchRects = PDFPageSearch.matchRects(on: original, query: query, displaySize: size)
+    }
+
+    private func clearPDFMatches() {
+        pdfMatchPage = nil
+        pdfMatchRects = []
     }
 
     private func saveViewState() {

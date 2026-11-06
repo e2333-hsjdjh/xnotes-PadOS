@@ -11,6 +11,7 @@ struct PageNavigator: View {
     let editBookmark: (BookmarkEdit, UUID) -> Bool
     let exportPages: (Set<UUID>) throws -> Data
     let open: (UUID) -> Void
+    let openPDFMatch: (UUID, String) -> Void
     let add: () -> Void
     let duplicate: (Set<UUID>) -> Bool
     let delete: (Set<UUID>) -> Bool
@@ -258,7 +259,11 @@ struct PageNavigator: View {
             if selecting {
                 if selected.remove(page.id) == nil { selected.insert(page.id) }
             } else {
-                open(page.id)
+                if pdfSnippet != nil {
+                    openPDFMatch(page.id, term)
+                } else {
+                    open(page.id)
+                }
                 dismiss()
             }
         } label: {

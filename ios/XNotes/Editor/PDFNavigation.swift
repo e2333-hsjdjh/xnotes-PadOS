@@ -52,9 +52,34 @@ struct PDFOutlineView: View {
 }
 
 enum PDFPageSearch {
+    private static let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+
+    static func matchRects(on page: PDFPage, query: String, displaySize: CGSize) -> [CGRect] {
+        guard !query.isEmpty, let text = page.string, let reference = page.pageRef else { return [] }
+        let display = CGRect(origin: .zero, size: displaySize)
+        let transform = reference.getDrawingTransform(.cropBox, rect: display, rotate: 0, preserveAspectRatio: true)
+        var cursor = text.startIndex
+        var rectangles: [CGRect] = []
+        for _ in 0..<100 {
+            guard cursor < text.endIndex,
+                  let range = text.range(of: query, options: options, range: cursor..<text.endIndex,
+                                         locale: .current), !range.isEmpty else { break }
+            cursor = range.upperBound
+            guard let selection = page.selection(for: NSRange(range, in: text)) else { continue }
+            for line in selection.selectionsByLine() {
+                let bottomUp = line.bounds(for: page).applying(transform)
+                let topDown = CGRect(x: bottomUp.minX, y: display.height - bottomUp.maxY,
+                                     width: bottomUp.width, height: bottomUp.height)
+                let clipped = topDown.intersection(display)
+                if !clipped.isEmpty && !clipped.isInfinite { rectangles.append(clipped) }
+            }
+        }
+        return rectangles
+    }
+
     static func snippet(in text: String, matching query: String) -> String? {
         guard !query.isEmpty, let range = text.range(of: query,
-            options: [.caseInsensitive, .diacriticInsensitive], locale: .current) else { return nil }
+            options: options, locale: .current) else { return nil }
         let start = text.index(range.lowerBound, offsetBy: -36, limitedBy: text.startIndex) ?? text.startIndex
         let end = text.index(range.upperBound, offsetBy: 54, limitedBy: text.endIndex) ?? text.endIndex
         let excerpt = text[start..<end].split(whereSeparator: \.isWhitespace).joined(separator: " ")
