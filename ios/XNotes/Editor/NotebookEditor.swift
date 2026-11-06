@@ -26,6 +26,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     @AppStorage("penCustomColor") private var penCustomColor = ""
     @AppStorage("markerCustomColor") private var markerCustomColor = ""
     @State private var inkSettingsTool: InkTool?
+    @AppStorage("eraserMode") private var eraserMode = InkEraserMode.stroke
     @AppStorage("pencilOnly") private var pencilOnly = false
     @State private var showLayers = false
     @State private var layerEditMode: EditMode = .inactive
@@ -257,6 +258,11 @@ struct NotebookEditor<SplitChoices: View>: View {
                 Menu("Ink settings", systemImage: "slider.horizontal.3") {
                     Button("Pen") { inkSettingsTool = .pen }
                     Button("Highlighter") { inkSettingsTool = .marker }
+                    Picker("Eraser mode", selection: $eraserMode) {
+                        ForEach(InkEraserMode.allCases, id: \.self) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
                     Toggle("Apple Pencil only", isOn: $pencilOnly)
                 }
                 .frame(minWidth: 48, minHeight: 48)
@@ -297,7 +303,7 @@ struct NotebookEditor<SplitChoices: View>: View {
                     InkSurface(
                         ink: layer.ink, tool: tool, color: activeInkColor,
                         width: tool == .marker ? markerWidth : penWidth,
-                        darkPaper: darkPaper, pencilOnly: pencilOnly,
+                        eraser: eraserMode, darkPaper: darkPaper, pencilOnly: pencilOnly,
                         changed: { data, gesture in
                             updatePage(on: pageID, gesture: gesture) { page in
                                 guard let index = page.layers.firstIndex(where: { $0.id == layer.id }),

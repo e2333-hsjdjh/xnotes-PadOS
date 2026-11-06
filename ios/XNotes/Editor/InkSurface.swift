@@ -9,11 +9,11 @@ enum InkTool: String, CaseIterable, Identifiable {
 
     var id: Self { self }
 
-    func pencilTool(color: UIColor, width: CGFloat) -> any PKTool {
+    func pencilTool(color: UIColor, width: CGFloat, eraser: InkEraserMode = .stroke) -> any PKTool {
         switch self {
         case .pen: PKInkingTool(.pen, color: color, width: width)
         case .marker: PKInkingTool(.marker, color: color, width: width)
-        case .eraser: PKEraserTool(.vector)
+        case .eraser: eraser.makeTool()
         case .lasso: PKLassoTool()
         }
     }
@@ -28,11 +28,30 @@ enum InkTool: String, CaseIterable, Identifiable {
     }
 }
 
+enum InkEraserMode: String, CaseIterable {
+    case stroke, partial
+
+    var label: LocalizedStringKey {
+        switch self {
+        case .stroke: "Erase whole stroke"
+        case .partial: "Erase part of stroke"
+        }
+    }
+
+    func makeTool() -> PKEraserTool {
+        switch self {
+        case .stroke: PKEraserTool(.vector)
+        case .partial: PKEraserTool(.bitmap)
+        }
+    }
+}
+
 struct InkSurface: UIViewRepresentable {
     let ink: Data
     let tool: InkTool
     let color: UIColor
     let width: CGFloat
+    let eraser: InkEraserMode
     let darkPaper: Bool
     let pencilOnly: Bool
     let changed: (Data, UUID?) -> Bool
@@ -54,7 +73,7 @@ struct InkSurface: UIViewRepresentable {
         context.coordinator.changed = changed
         view.overrideUserInterfaceStyle = darkPaper ? .dark : .light
         view.drawingPolicy = pencilOnly ? .pencilOnly : .anyInput
-        view.tool = tool.pencilTool(color: color, width: width)
+        context.coordinator.setTool(tool.pencilTool(color: color, width: width, eraser: eraser), on: view)
         if context.coordinator.loaded != ink {
             context.coordinator.load(ink, into: view)
         }
@@ -64,6 +83,15 @@ struct InkSurface: UIViewRepresentable {
         private(set) var loaded = Data()
         private var displayed = Data()
         private var gesture: UUID?
+        private var pendingTool: (any PKTool)?
+
+        func setTool(_ tool: any PKTool, on canvas: PKCanvasView) {
+            if gesture != nil {
+                pendingTool = tool
+            } else {
+                canvas.tool = tool
+            }
+        }
         var changed: ((Data, UUID?) -> Bool)?
 
         func load(_ ink: Data, into canvasView: PKCanvasView) {
@@ -79,6 +107,10 @@ struct InkSurface: UIViewRepresentable {
 
         func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
             gesture = nil
+            if let pendingTool {
+                self.pendingTool = nil
+                canvasView.tool = pendingTool
+            }
         }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {

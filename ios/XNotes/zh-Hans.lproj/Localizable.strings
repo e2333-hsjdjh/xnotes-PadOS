@@ -160,3 +160,6 @@
 "Violet ink" = "紫色";
 "Preset color" = "预设颜色";
 "Custom ink color" = "自定义笔迹颜色";
+"Eraser mode" = "橡皮模式";
+"Erase whole stroke" = "整笔擦除";
+"Erase part of stroke" = "局部擦除";
