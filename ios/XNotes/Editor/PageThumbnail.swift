@@ -44,7 +44,7 @@ struct PageThumbnail: View {
 
     @MainActor
     static func render(_ page: NotePage, original: PDFPage?) throws -> UIImage {
-        let size = try original.map(NotebookPageDrawing.displaySize) ?? (page.paperSize ?? .letter).dimensions
+        let size = try original.map(PDFPageGeometry.displaySize) ?? (page.paperSize ?? .letter).dimensions
         let scale = 160 / max(size.width, size.height)
         let output = CGSize(width: max(1, size.width * scale), height: max(1, size.height * scale))
         let format = UIGraphicsImageRendererFormat()

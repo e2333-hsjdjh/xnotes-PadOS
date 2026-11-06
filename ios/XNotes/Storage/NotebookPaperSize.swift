@@ -18,6 +18,13 @@ struct NotebookPaperSize: Codable, Equatable {
         self.init(width: widthMM * Self.pointsPerMillimeter, height: heightMM * Self.pointsPerMillimeter)
     }
 
+    static func enclosing(width: Double, height: Double) -> Self {
+        let minimum = millimeterLimits.lowerBound * pointsPerMillimeter
+        let maximum = millimeterLimits.upperBound * pointsPerMillimeter
+        return Self(width: min(max(width, minimum), maximum),
+                    height: min(max(height, minimum), maximum))
+    }
+
     var dimensions: CGSize { CGSize(width: width, height: height) }
     var isValid: Bool {
         let limits = Self.millimeterLimits

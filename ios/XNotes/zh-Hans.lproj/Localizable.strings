@@ -125,3 +125,6 @@
 "Relink original PDF" = "重新关联原始 PDF";
 "This backup does not contain an original PDF." = "此备份未包含原始 PDF。";
 "This PDF does not match the original document." = "此 PDF 与原始文档不匹配。";
+"Recover PDF" = "恢复 PDF";
+"Save annotation-only copy" = "另存仅批注副本";
+"%@ (Annotations)" = "%@（批注）";

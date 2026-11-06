@@ -148,6 +148,34 @@ final class LibraryStore {
         pdfRestorationRevision += 1
     }
 
+    func createAnnotationCopy(of documentID: UUID) throws -> UUID {
+        guard let original = notebooks.first(where: { $0.id == documentID && $0.kind == .pdf }) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let title = String(localized: "\(original.title) (Annotations)")
+        var copy = Notebook(title: title, kind: .notebook, folderID: original.folderID)
+        copy.pages = original.pages.map { source in
+            var page = source
+            let size = source.paperSize ?? .letter
+            var width = size.width
+            var height = size.height
+            for image in page.images ?? [] {
+                width = max(width, image.frame.maxX)
+                height = max(height, image.frame.maxY)
+            }
+            for layer in page.layers where !layer.ink.isEmpty {
+                guard let drawing = try? PKDrawing(data: layer.ink), !drawing.bounds.isEmpty else { continue }
+                let bounds = drawing.bounds
+                if bounds.maxX.isFinite { width = max(width, bounds.maxX) }
+                if bounds.maxY.isFinite { height = max(height, bounds.maxY) }
+            }
+            page.paperSize = .enclosing(width: width, height: height)
+            return page
+        }
+        try save(copy)
+        return copy.id
+    }
+
     private func readFile(_ url: URL) throws -> Data {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -158,9 +186,15 @@ final class LibraryStore {
         let data = try readFile(url)
         var notebook: Notebook
         if url.pathExtension.lowercased() == "pdf" {
-            let count = try pageCount(data)
+            let pdf = try readablePDF(data)
             notebook = Notebook(title: url.deletingPathExtension().lastPathComponent, kind: .pdf)
-            notebook.pages = (0..<count).map { _ in NotePage() }
+            notebook.pages = (0..<pdf.pageCount).map { index in
+                var page = NotePage()
+                if let original = pdf.page(at: index), let size = try? PDFPageGeometry.displaySize(original) {
+                    page.paperSize = .enclosing(width: size.width, height: size.height)
+                }
+                return page
+            }
             notebook.pdfDigest = try preservePDF(data)
         } else {
             let archive = try JSONDecoder().decode(NotebookArchive.self, from: data)
@@ -215,10 +249,14 @@ final class LibraryStore {
     }
 
     private func pageCount(_ data: Data) throws -> Int {
+        try readablePDF(data).pageCount
+    }
+
+    private func readablePDF(_ data: Data) throws -> PDFDocument {
         guard let pdf = PDFDocument(data: data), !pdf.isLocked, pdf.pageCount > 0 else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        return pdf.pageCount
+        return pdf
     }
 
     private func digest(_ data: Data) -> String {

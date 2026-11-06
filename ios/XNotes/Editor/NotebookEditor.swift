@@ -9,6 +9,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     let library: LibraryStore
     let readOnly: Bool
     let close: () -> Void
+    let openRecoveredCopy: (UUID) -> Void
     @ViewBuilder let splitChoices: () -> SplitChoices
 
     @Environment(\.colorScheme) private var scheme
@@ -61,8 +62,18 @@ struct NotebookEditor<SplitChoices: View>: View {
                 HStack {
                     Text("Original PDF unavailable").font(.subheadline)
                     Spacer()
-                    Button("Relink original PDF", systemImage: "link") { selectingOriginalPDF = true }
-                        .frame(minHeight: 48)
+                    Menu("Recover PDF", systemImage: "link") {
+                        Button("Relink original PDF", systemImage: "link") { selectingOriginalPDF = true }
+                        Button("Save annotation-only copy", systemImage: "doc.on.doc") {
+                            do {
+                                let id = try library.createAnnotationCopy(of: notebook.id)
+                                openRecoveredCopy(id)
+                            } catch {
+                                library.issue = error.localizedDescription
+                            }
+                        }
+                    }
+                    .frame(minHeight: 48)
                 }
                 .padding(.horizontal, 8)
                 Divider()
@@ -490,7 +501,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             pdfImage = nil
             return
         }
-        guard let size = try? NotebookPageDrawing.thumbnailRequest(page) else {
+        guard let size = try? PDFPageGeometry.thumbnailRequest(page) else {
             pdfImage = nil
             return
         }

@@ -14,7 +14,7 @@ enum NotebookPDFExport {
         }
         let pages = try selected.map { index, page in
             let original = source?.page(at: index)
-            let size = try original.map(NotebookPageDrawing.displaySize) ?? (page.paperSize ?? .letter).dimensions
+            let size = try original.map(PDFPageGeometry.displaySize) ?? (page.paperSize ?? .letter).dimensions
             return (page, original, CGRect(origin: .zero, size: size))
         }
         var renderError: Error?

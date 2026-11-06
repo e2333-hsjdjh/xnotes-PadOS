@@ -265,6 +265,10 @@ struct LibraryView: View {
         let shared = panes.first(where: { $0.documentID == notebook.id })?.id != pane.id
         return NotebookEditor(notebook: notebook, library: library, readOnly: shared, close: {
             panes.removeAll { $0.id == pane.id }
+        }, openRecoveredCopy: { documentID in
+            if let index = panes.firstIndex(where: { $0.id == pane.id }) {
+                panes[index].documentID = documentID
+            }
         }) {
             if notebook.kind != .canvas {
                 Button("Open another view", systemImage: "rectangle.on.rectangle") {
