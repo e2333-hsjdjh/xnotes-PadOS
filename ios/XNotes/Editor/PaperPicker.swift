@@ -86,6 +86,8 @@ extension PaperPattern {
         case .guitarTab: "Guitar tablature"
         case .cornell: "Cornell notes"
         case .calligraphy: "Calligraphy guide"
+        case .isometricGrid: "Isometric grid"
+        case .isometricDots: "Isometric dots"
         }
     }
 }
@@ -152,6 +154,8 @@ private struct PaperParametersView: View {
         case .guitarTab: "String spacing"
         case .musicalStaves: "Staff line gap"
         case .calligraphy: "Nib width"
+        case .isometricGrid: "Triangle side"
+        case .isometricDots: "Dot spacing"
         default: "Template spacing"
         }
     }

@@ -22,6 +22,8 @@ struct PaperPatternParameters: Codable, Equatable {
         case .guitarTab: return Self(spacingMM: 3)
         case .cornell: return Self(spacingMM: 8, cueFraction: 0.3, summaryMM: 50)
         case .calligraphy: return Self(spacingMM: 3, xHeight: 5, slant: 7)
+        case .isometricGrid: return Self(spacingMM: 8)
+        case .isometricDots: return Self(spacingMM: 6)
         }
         return Self(spacingMM: points / NotebookPaperSize.pointsPerMillimeter)
     }
@@ -33,6 +35,8 @@ struct PaperPatternParameters: Codable, Equatable {
         case .musicalStaves: 1.2...3
         case .guitarTab: 2...5
         case .calligraphy: 1...8
+        case .isometricGrid: 4...25
+        case .isometricDots: 3...20
         default: 3...15
         }
     }

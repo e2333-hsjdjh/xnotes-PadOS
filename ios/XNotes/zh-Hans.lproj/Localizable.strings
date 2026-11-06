@@ -237,3 +237,7 @@
 "Cues" = "提示";
 "Notes" = "笔记";
 "Summary" = "总结";
+"Isometric grid" = "等距网格";
+"Isometric dots" = "等距点阵";
+"Triangle side" = "三角形边长";
+"Dot spacing" = "点间距";
