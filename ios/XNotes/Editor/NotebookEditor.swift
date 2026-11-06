@@ -181,6 +181,7 @@ struct NotebookEditor<SplitChoices: View>: View {
                 documentTitle: notebook.title,
                 bookmarkEditing: canEdit,
                 editBookmark: editBookmark,
+                exportImages: exportPageImages,
                 exportPages: { ids in
                     guard let latestNotebook else { throw CocoaError(.fileReadNoSuchFile) }
                     return try NotebookPDFExport.data(for: latestNotebook, source: pdf, selecting: ids)
@@ -652,6 +653,11 @@ struct NotebookEditor<SplitChoices: View>: View {
                 if !Task.isCancelled { library.issue = error.localizedDescription }
             }
         }
+    }
+
+    private func exportPageImages(_ ids: Set<UUID>) throws -> [ExportFile] {
+        guard let latestNotebook else { throw CocoaError(.fileReadNoSuchFile) }
+        return try PageImageExport.files(for: latestNotebook, source: pdf, selecting: ids)
     }
 
     private func showPDFMatches(_ pageID: UUID, query: String) {

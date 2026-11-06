@@ -1,5 +1,6 @@
 import PDFKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct PageNavigator: View {
     let pages: [NotePage]
@@ -9,6 +10,7 @@ struct PageNavigator: View {
     let documentTitle: String
     let bookmarkEditing: Bool
     let editBookmark: (BookmarkEdit, UUID) -> Bool
+    let exportImages: (Set<UUID>) throws -> [ExportFile]
     let exportPages: (Set<UUID>) throws -> Data
     let open: (UUID) -> Void
     let openPDFMatch: (UUID, String) -> Void
@@ -22,7 +24,8 @@ struct PageNavigator: View {
     @State private var query = ""
     @State private var deleting: Set<UUID> = []
     @State private var selecting = false
-    @State private var export: ExportFile?
+    @State private var export: [ExportFile] = []
+    @State private var exportType: UTType = .pdf
     @State private var showingExporter = false
     @State private var exportIssue: String?
     @State private var paperRequest: PaperRequest?
@@ -126,8 +129,9 @@ struct PageNavigator: View {
                     ToolbarItemGroup(placement: .bottomBar) {
                         Text("\(selected.count) selected")
                         Spacer()
-                        Button("Export selected pages as PDF", systemImage: "square.and.arrow.up") {
-                            prepareExport()
+                        Menu("Export selected pages", systemImage: "square.and.arrow.up") {
+                            Button("Export selected pages as PDF") { prepareExport(asImages: false) }
+                            Button("Export selected pages as PNG") { prepareExport(asImages: true) }
                         }
                         .disabled(selected.isEmpty)
                         if editable {
@@ -148,12 +152,11 @@ struct PageNavigator: View {
                     }
                 }
             }
-            .fileExporter(isPresented: $showingExporter, document: export, contentType: .pdf,
-                          defaultFilename: documentTitle) { result in
-                export = nil
+            .fileExporter(isPresented: $showingExporter, documents: export, contentType: exportType) { result in
+                export = []
                 if case .failure(let error) = result { exportIssue = error.localizedDescription }
             }
-            .alert("PDF export failed", isPresented: Binding(
+            .alert("Page export failed", isPresented: Binding(
                 get: { exportIssue != nil },
                 set: { if !$0 { exportIssue = nil } }
             )) {
@@ -193,9 +196,15 @@ struct PageNavigator: View {
         }
     }
 
-    private func prepareExport() {
+    private func prepareExport(asImages: Bool) {
         do {
-            export = ExportFile(data: try exportPages(selected))
+            if asImages {
+                export = try exportImages(selected)
+                exportType = .png
+            } else {
+                export = [ExportFile(data: try exportPages(selected), filename: documentTitle + ".pdf")]
+                exportType = .pdf
+            }
             showingExporter = true
         } catch {
             exportIssue = error.localizedDescription

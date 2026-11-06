@@ -2,10 +2,14 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ExportFile: FileDocument {
-    static let readableContentTypes: [UTType] = [.xnotesArchive, .pdf]
+    static let readableContentTypes: [UTType] = [.xnotesArchive, .pdf, .png]
     var data = Data()
+    var filename: String?
 
-    init(data: Data = Data()) { self.data = data }
+    init(data: Data = Data(), filename: String? = nil) {
+        self.data = data
+        self.filename = filename
+    }
 
     init(configuration: ReadConfiguration) throws {
         guard let data = configuration.file.regularFileContents else { throw CocoaError(.fileReadCorruptFile) }
@@ -13,6 +17,8 @@ struct ExportFile: FileDocument {
     }
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: data)
+        let file = FileWrapper(regularFileWithContents: data)
+        file.preferredFilename = filename
+        return file
     }
 }

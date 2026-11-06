@@ -92,4 +92,27 @@ enum NotebookPageDrawing {
             }
         }
     }
+
+    @MainActor
+    static func render(_ page: NotePage, original: PDFPage?, longestEdge: CGFloat) throws -> UIImage {
+        let size = try original.map(PDFPageGeometry.displaySize) ?? (page.paperSize ?? .letter).dimensions
+        let scale = longestEdge / max(size.width, size.height)
+        let output = CGSize(width: max(1, size.width * scale), height: max(1, size.height * scale))
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        var renderError: Error?
+        let image = UIGraphicsImageRenderer(size: output, format: format).image { context in
+            let graphics = context.cgContext
+            graphics.scaleBy(x: output.width / size.width, y: output.height / size.height)
+            do {
+                try NotebookPageDrawing.draw(page, original: original, in: CGRect(origin: .zero, size: size),
+                                             with: graphics, inkScale: scale)
+            } catch {
+                renderError = error
+            }
+        }
+        if let renderError { throw renderError }
+        return image
+    }
 }

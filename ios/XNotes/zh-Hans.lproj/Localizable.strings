@@ -180,3 +180,6 @@
 "Crop image" = "裁剪图片";
 "From photo library" = "从照片图库";
 "From files" = "从文件";
+"Export selected pages" = "导出所选页面";
+"Export selected pages as PNG" = "将所选页面导出为 PNG";
+"Page export failed" = "页面导出失败";
