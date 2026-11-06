@@ -49,7 +49,7 @@ struct PageImage: Codable, Identifiable, Equatable {
 }
 
 enum PaperPattern: String, Codable, CaseIterable, Identifiable {
-    case blank, ruled, grid, dots
+    case blank, ruled, grid, dots, engineering
 
     var id: Self { self }
 }

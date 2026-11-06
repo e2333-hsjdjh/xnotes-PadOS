@@ -39,6 +39,9 @@ extension PaperPattern {
                 context.addLine(to: CGPoint(x: size.width, y: y))
             }
             context.strokePath()
+        case .engineering:
+            Self.drawEngineering(in: context, size: size, spacing: spacing, group: values.squaresPerBlock ?? 5,
+                                 gray: gray, opacity: values.opacity, preview: preview)
         case .dots:
             let inset: CGFloat = 17
             let diameter: CGFloat = preview ? 5 : 1.7
@@ -57,6 +60,35 @@ extension PaperPattern {
                 }
             }
             context.fillPath()
+        }
+    }
+
+    private static func drawEngineering(in context: CGContext, size: CGSize, spacing: CGFloat, group: Int,
+                                        gray: CGFloat, opacity: Double, preview: Bool) {
+        let inset = CGFloat(10 * NotebookPaperSize.pointsPerMillimeter)
+        let block = spacing * CGFloat(group)
+        let columns = Int(max(0, size.width - 2 * inset) / block)
+        let rows = Int(max(0, size.height - 2 * inset) / block)
+        guard columns > 0, rows > 0 else { return }
+        let width = CGFloat(columns) * block
+        let height = CGFloat(rows) * block
+        let left = (size.width - width) / 2
+        let top = (size.height - height) / 2
+
+        for major in [false, true] {
+            context.setStrokeColor(gray: gray, alpha: opacity * (major ? 1 : 0.45))
+            context.setLineWidth(preview ? (major ? 4 : 2) : CGFloat(major ? 0.3 : 0.15) * NotebookPaperSize.pointsPerMillimeter)
+            for column in 0...(columns * group) where (column % group == 0) == major {
+                let x = left + CGFloat(column) * spacing
+                context.move(to: CGPoint(x: x, y: top))
+                context.addLine(to: CGPoint(x: x, y: top + height))
+            }
+            for row in 0...(rows * group) where (row % group == 0) == major {
+                let y = top + CGFloat(row) * spacing
+                context.move(to: CGPoint(x: left, y: y))
+                context.addLine(to: CGPoint(x: left + width, y: y))
+            }
+            context.strokePath()
         }
     }
 }

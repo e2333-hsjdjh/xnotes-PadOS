@@ -81,6 +81,7 @@ extension PaperPattern {
         case .ruled: "Ruled paper"
         case .grid: "Square grid"
         case .dots: "Dot grid"
+        case .engineering: "Engineering paper"
         }
     }
 }
@@ -104,6 +105,12 @@ private struct PaperParametersView: View {
                 .border(Color.gray.opacity(0.5))
                 .frame(maxWidth: .infinity)
             millimeters("Template spacing", value: $draft.spacingMM, range: PaperPatternParameters.spacingRange(for: pattern))
+            if pattern == .engineering {
+                let count = Binding(get: { draft.squaresPerBlock ?? 5 }, set: { draft.squaresPerBlock = $0 })
+                Stepper(value: count, in: 2...10) {
+                    LabeledContent("Squares per block", value: count.wrappedValue.formatted())
+                }
+            }
             if pattern == .ruled {
                 millimeters("Header height", value: $draft.headerMM, range: 0...60)
                 millimeters("Margin width", value: $draft.marginMM, range: 0...60)

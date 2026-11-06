@@ -221,3 +221,5 @@
 "Template opacity" = "模板不透明度";
 "Restore default paper settings" = "恢复默认纸张参数";
 "%.1f mm" = "%.1f 毫米";
+"Engineering paper" = "工程方格纸";
+"Squares per block" = "每组格数";
