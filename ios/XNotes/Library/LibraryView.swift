@@ -347,7 +347,7 @@ struct LibraryView: View {
                     open(notebook.id)
                 }
             } label: {
-                entryLabel(Text(verbatim: notebook.title), symbol: documentSymbol(notebook),
+                entryLabel(Text(verbatim: notebook.title), symbol: documentSymbol(notebook), cover: notebook,
                            detail: sort == .size ? ByteCountFormatter.string(fromByteCount: library.documentSize(notebook),
                                                                             countStyle: .file) : nil)
             }
@@ -394,10 +394,21 @@ struct LibraryView: View {
         return selectedDocuments.contains(notebook.id) ? "checkmark.circle.fill" : "circle"
     }
 
-    @ViewBuilder private func entryLabel(_ title: Text, symbol: String, detail: String? = nil) -> some View {
+    @ViewBuilder private func entryLabel(_ title: Text, symbol: String, cover: Notebook? = nil, detail: String? = nil) -> some View {
         if layout == .grid {
             VStack(spacing: 8) {
-                Image(systemName: symbol).font(.title2)
+                if let cover {
+                    LibraryCoverThumbnail(notebook: cover, library: library)
+                        .overlay(alignment: .topTrailing) {
+                            if selectingDocuments {
+                                Image(systemName: symbol)
+                                    .padding(5)
+                                    .background(.background, in: Circle())
+                            }
+                        }
+                } else {
+                    Image(systemName: symbol).font(.title2)
+                }
                 title.font(.subheadline).lineLimit(2)
                 if let detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
             }

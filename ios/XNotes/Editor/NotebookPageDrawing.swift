@@ -47,7 +47,7 @@ enum NotebookPageDrawing {
             PDFTextMarkupDrawing.draw(page.pdfTextMarkups ?? [], in: graphics, size: bounds.size,
                                       rotation: original.rotation)
         } else if let pattern = page.paperPattern {
-            pattern.draw(in: graphics, size: bounds.size, dark: false)
+            pattern.draw(in: graphics, size: bounds.size, dark: dark)
         }
         try drawContents(page, in: bounds, visible: visible, inkScale: inkScale, dark: dark)
     }
@@ -94,8 +94,11 @@ enum NotebookPageDrawing {
     }
 
     @MainActor
-    static func render(_ page: NotePage, original: PDFPage?, longestEdge: CGFloat) throws -> UIImage {
-        let size = try original.map(PDFPageGeometry.displaySize) ?? (page.paperSize ?? .letter).dimensions
+    static func render(_ page: NotePage, original: PDFPage?, longestEdge: CGFloat,
+                       canvas: Bool = false, dark: Bool = false) throws -> UIImage {
+        let paper = canvas ? canvasSize : try original.map(PDFPageGeometry.displaySize) ?? (page.paperSize ?? .letter).dimensions
+        let crop = canvas ? try canvasCrop(page) : nil
+        let size = crop?.size ?? paper
         let scale = longestEdge / max(size.width, size.height)
         let output = CGSize(width: max(1, size.width * scale), height: max(1, size.height * scale))
         let format = UIGraphicsImageRendererFormat()
@@ -106,8 +109,8 @@ enum NotebookPageDrawing {
             let graphics = context.cgContext
             graphics.scaleBy(x: output.width / size.width, y: output.height / size.height)
             do {
-                try NotebookPageDrawing.draw(page, original: original, in: CGRect(origin: .zero, size: size),
-                                             with: graphics, inkScale: scale)
+                try NotebookPageDrawing.draw(page, original: original, in: CGRect(origin: .zero, size: paper),
+                                             with: graphics, inkScale: scale, crop: crop, dark: dark)
             } catch {
                 renderError = error
             }
