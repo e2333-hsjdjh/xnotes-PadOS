@@ -25,6 +25,7 @@ struct LibraryView: View {
     @State private var exportType: UTType = .xnotesArchive
     @State private var exportTitle = ""
     @State private var panes: [DocumentPane] = []
+    @AppStorage("lastSplitWorkspace") private var lastSplitWorkspace = Data()
     @State private var renaming: Notebook?
     @State private var deleting: Set<UUID> = []
     @State private var deleteWithoutTrash = false
@@ -56,13 +57,24 @@ struct LibraryView: View {
             .sorted { sort.precedes($0, $1, descending: descending) }
     }
 
+    private var restorableSplit: SplitWorkspace? {
+        guard let saved = try? JSONDecoder().decode(SplitWorkspace.self, from: lastSplitWorkspace),
+              saved.canRestore(from: library.notebooks) else { return nil }
+        return saved
+    }
+
+    private var availablePanes: [DocumentPane] {
+        panes.filter { openNotebook($0.documentID) != nil }
+    }
+
     var body: some View {
         Group {
-            if !panes.isEmpty {
+            let activePanes = availablePanes
+            if !activePanes.isEmpty {
                 HStack(spacing: 0) {
-                    ForEach(panes) { pane in
+                    ForEach(activePanes) { pane in
                         if let notebook = openNotebook(pane.documentID) {
-                            if pane.id != panes.first?.id { Divider() }
+                            if pane.id != activePanes.first?.id { Divider() }
                             editor(notebook, in: pane)
                         }
                     }
@@ -70,6 +82,10 @@ struct LibraryView: View {
             } else {
                 explorer
             }
+        }
+        .onChange(of: availablePanes) { _, active in
+            if panes != active { panes = active }
+            rememberSplit(active)
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf, .xnotesArchive]) { result in
             perform {
@@ -184,6 +200,11 @@ struct LibraryView: View {
                             query = ""
                         }
                         if !showTrash {
+                            if let restorableSplit {
+                                Button("Restore last split view", systemImage: "rectangle.split.2x1") {
+                                    restoreSplit(restorableSplit)
+                                }
+                            }
                             Button("Folders", systemImage: "folder") { folderRequest = FolderRequest(action: .browse) }
                         }
                         Picker("Layout", selection: $layout) {
@@ -395,6 +416,17 @@ struct LibraryView: View {
         panes = [DocumentPane(documentID: documentID)]
     }
 
+    private func rememberSplit(_ active: [DocumentPane]) {
+        guard active.count == 2 else { return }
+        let workspace = SplitWorkspace(leading: active[0].documentID, trailing: active[1].documentID)
+        if let encoded = try? JSONEncoder().encode(workspace) { lastSplitWorkspace = encoded }
+    }
+
+    private func restoreSplit(_ saved: SplitWorkspace) {
+        guard saved.canRestore(from: library.notebooks) else { return }
+        panes = [DocumentPane(documentID: saved.leading), DocumentPane(documentID: saved.trailing)]
+    }
+
     private func openBeside(_ pane: DocumentPane, documentID: UUID) {
         guard panes.contains(where: { $0.id == pane.id }) else { return }
         if let index = panes.firstIndex(where: { $0.id != pane.id }) {
@@ -505,7 +537,7 @@ struct LibraryView: View {
     }
 }
 
-private struct DocumentPane: Identifiable {
+private struct DocumentPane: Identifiable, Equatable {
     let id = UUID()
     var documentID: UUID
 }
