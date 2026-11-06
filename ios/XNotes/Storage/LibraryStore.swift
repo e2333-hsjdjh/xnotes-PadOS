@@ -12,6 +12,7 @@ final class LibraryStore {
     private var folderCatalogReadable = true
     private(set) var unreadableCount = 0
     var issue: String?
+    private(set) var pdfRestorationRevision = 0
     private let directory: URL
 
     private var folderCatalog: URL { directory.appending(path: "Folders.plist") }
@@ -113,14 +114,48 @@ final class LibraryStore {
     }
 
     func pdf(for notebook: Notebook) -> PDFDocument? {
-        guard let digest = notebook.pdfDigest else { return nil }
-        return PDFDocument(url: pdfURL(digest))
+        guard let digest = notebook.pdfDigest,
+              let document = PDFDocument(url: pdfURL(digest)), !document.isLocked,
+              document.pageCount == notebook.pages.count else { return nil }
+        return document
+    }
+
+    func restoreOriginalPDF(for documentID: UUID, from url: URL) throws {
+        guard let notebook = notebooks.first(where: { $0.id == documentID }),
+              notebook.kind == .pdf, let expected = notebook.pdfDigest else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let contents = try readFile(url)
+        let candidate: Data
+        if url.pathExtension.lowercased() == "pdf" {
+            candidate = contents
+        } else {
+            let archive = try JSONDecoder().decode(NotebookArchive.self, from: contents)
+            guard archive.version == 1, let original = archive.originalPDF else {
+                throw PDFRecoveryError.missingOriginal
+            }
+            candidate = original
+        }
+        guard digest(candidate) == expected else { throw PDFRecoveryError.differentOriginal }
+        guard try pageCount(candidate) == notebook.pages.count else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+
+        let destination = pdfURL(expected)
+        if (try? Data(contentsOf: destination, options: .mappedIfSafe)) != candidate {
+            try candidate.write(to: destination, options: .atomic)
+        }
+        pdfRestorationRevision += 1
+    }
+
+    private func readFile(_ url: URL) throws -> Data {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        return try Data(contentsOf: url)
     }
 
     func importFile(_ url: URL, into folderID: UUID? = nil) throws -> UUID {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        let data = try Data(contentsOf: url)
+        let data = try readFile(url)
         var notebook: Notebook
         if url.pathExtension.lowercased() == "pdf" {
             let count = try pageCount(data)
@@ -205,6 +240,19 @@ final class LibraryStore {
             try data.write(to: file, options: .atomic)
         }
         return hash
+    }
+}
+
+private enum PDFRecoveryError: LocalizedError {
+    case missingOriginal, differentOriginal
+
+    var errorDescription: String? {
+        switch self {
+        case .missingOriginal:
+            String(localized: "This backup does not contain an original PDF.")
+        case .differentOriginal:
+            String(localized: "This PDF does not match the original document.")
+        }
     }
 }
 

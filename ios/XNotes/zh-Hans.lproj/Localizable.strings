@@ -122,3 +122,6 @@
 "Edit selected paper" = "调整所选页面纸张";
 "Export selected pages as PDF" = "将所选页面导出为 PDF";
 "PDF export failed" = "PDF 导出失败";
+"Relink original PDF" = "重新关联原始 PDF";
+"This backup does not contain an original PDF." = "此备份未包含原始 PDF。";
+"This PDF does not match the original document." = "此 PDF 与原始文档不匹配。";

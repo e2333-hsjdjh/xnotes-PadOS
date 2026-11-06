@@ -2,6 +2,7 @@ import PDFKit
 import PencilKit
 import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct NotebookEditor<SplitChoices: View>: View {
     let notebook: Notebook
@@ -29,6 +30,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     @State private var text = ""
     @State private var layerToRename: UUID?
     @State private var layerName = ""
+    @State private var selectingOriginalPDF = false
     @State private var pdf: PDFDocument?
     @State private var pdfImage: UIImage?
     @State private var history = DocumentHistory()
@@ -43,6 +45,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     private var activeLayer: UUID {
         page.layers.first { $0.id == selectedLayer }?.id ?? page.layers[page.layers.count - 1].id
     }
+    private var canEdit: Bool { !readOnly && (notebook.kind != .pdf || pdf != nil) }
     private var darkPaper: Bool { scheme == .dark && notebook.kind != .pdf }
     private var paperSize: CGSize {
         if let pdfImage { return pdfImage.size }
@@ -54,12 +57,22 @@ struct NotebookEditor<SplitChoices: View>: View {
         VStack(spacing: 0) {
             header
             Divider()
-            if !readOnly {
+            if notebook.kind == .pdf && pdf == nil {
+                HStack {
+                    Text("Original PDF unavailable").font(.subheadline)
+                    Spacer()
+                    Button("Relink original PDF", systemImage: "link") { selectingOriginalPDF = true }
+                        .frame(minHeight: 48)
+                }
+                .padding(.horizontal, 8)
+                Divider()
+            }
+            if canEdit {
                 tools
                 Divider()
             }
             HStack(spacing: 0) {
-                if showLayers && !readOnly {
+                if showLayers && canEdit {
                     layerPanel
                     Divider()
                 }
@@ -75,9 +88,17 @@ struct NotebookEditor<SplitChoices: View>: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-            pdf = library.pdf(for: notebook)
-            loadBackground()
+        .onAppear { reloadPDF() }
+        .onChange(of: library.pdfRestorationRevision) {
+            if notebook.kind == .pdf && pdf == nil { reloadPDF() }
+        }
+        .fileImporter(isPresented: $selectingOriginalPDF, allowedContentTypes: [.pdf, .xnotesArchive]) { result in
+            do {
+                try library.restoreOriginalPDF(for: notebook.id, from: result.get())
+                reloadPDF()
+            } catch {
+                library.issue = error.localizedDescription
+            }
         }
         .onDisappear { imageImport?.cancel() }
         .onChange(of: readOnly) {
@@ -232,8 +253,6 @@ struct NotebookEditor<SplitChoices: View>: View {
             }
             if let pdfImage {
                 Image(uiImage: pdfImage).resizable().allowsHitTesting(false)
-            } else if notebook.kind == .pdf {
-                Text("Original PDF unavailable").foregroundStyle(.black).padding()
             }
             if !editingImages || readOnly {
                 ForEach(page.images ?? []) { image in
@@ -245,7 +264,7 @@ struct NotebookEditor<SplitChoices: View>: View {
                 .padding(24)
                 .allowsHitTesting(false)
             ForEach(page.layers.filter(\.visible)) { layer in
-                if !readOnly && layer.id == activeLayer && !layer.locked {
+                if canEdit && layer.id == activeLayer && !layer.locked {
                     InkSurface(
                         ink: layer.ink, tool: tool, color: darkPaper ? .white : .black,
                         width: width, pencilOnly: pencilOnly,
@@ -461,6 +480,11 @@ struct NotebookEditor<SplitChoices: View>: View {
         }
     }
 
+    private func reloadPDF() {
+        pdf = library.pdf(for: notebook)
+        loadBackground()
+    }
+
     private func loadBackground() {
         guard let page = pdf?.page(at: pageIndex) else {
             pdfImage = nil
@@ -489,7 +513,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     }
 
     @discardableResult private func save(_ updated: Notebook, gesture: UUID? = nil) -> Bool {
-        guard !readOnly, let previous = library.notebooks.first(where: { $0.id == updated.id }) else { return false }
+        guard canEdit, let previous = library.notebooks.first(where: { $0.id == updated.id }) else { return false }
         guard previous.pages != updated.pages else { return false }
         var next = previous
         next.pages = updated.pages
