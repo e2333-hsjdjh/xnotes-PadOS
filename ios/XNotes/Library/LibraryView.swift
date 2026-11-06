@@ -47,6 +47,11 @@ struct LibraryView: View {
         }.sorted { sort.precedes($0, $1, descending: descending) }
     }
 
+    private var selectedForPDF: [Notebook] {
+        library.notebooks.filter { selectedDocuments.contains($0.id) && $0.trashedAt == nil }
+            .sorted { sort.precedes($0, $1, descending: descending) }
+    }
+
     var body: some View {
         Group {
             if !panes.isEmpty {
@@ -205,6 +210,12 @@ struct LibraryView: View {
                                 showFolders = true
                             }
                             .disabled(selectedDocuments.isEmpty)
+                            Button("Export selected documents as PDF", systemImage: "square.and.arrow.up") {
+                                exportPDFs(selectedForPDF)
+                            }
+                            .disabled(selectedDocuments.isEmpty ||
+                                      selectedForPDF.count != selectedDocuments.count ||
+                                      selectedForPDF.contains { $0.kind == .canvas })
                             Button("Trash selected documents", systemImage: "trash", role: .destructive) {
                                 applyBatch(.trash(true), to: selectedDocuments)
                             }
@@ -392,10 +403,17 @@ struct LibraryView: View {
     }
 
     private func exportPDF(_ notebook: Notebook) {
+        exportPDFs([notebook])
+    }
+
+    private func exportPDFs(_ notebooks: [Notebook]) {
         perform {
-            export = ExportFile(data: try NotebookPDFExport.data(for: notebook, source: library.pdf(for: notebook)))
+            let inputs = notebooks.map { notebook in
+                NotebookPDFExport.Input(notebook: notebook, source: library.pdf(for: notebook))
+            }
+            export = ExportFile(data: try NotebookPDFExport.data(for: inputs))
             exportType = .pdf
-            exportTitle = notebook.title
+            exportTitle = notebooks.count == 1 ? notebooks[0].title : String(localized: "Selected documents")
             exporting = true
         }
     }
