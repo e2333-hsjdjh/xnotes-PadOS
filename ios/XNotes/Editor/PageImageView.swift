@@ -7,6 +7,7 @@ struct PageImageView: View {
     let paperSize: CGSize
     let move: (CGRect) -> Void
     let remove: () -> Void
+    var crop: (() -> Void)? = nil
 
     @GestureState private var translation = CGSize.zero
 
@@ -25,6 +26,7 @@ struct PageImageView: View {
                     .contextMenu {
                         Button("Enlarge image", systemImage: "plus.magnifyingglass") { resize(by: 1.25) }
                         Button("Shrink image", systemImage: "minus.magnifyingglass") { resize(by: 0.8) }
+                        if let crop { Button("Crop image", systemImage: "crop", action: crop) }
                         Button("Remove image", systemImage: "trash", role: .destructive, action: remove)
                     }
             } else {

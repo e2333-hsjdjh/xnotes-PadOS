@@ -39,6 +39,13 @@ struct NotebookEditor<SplitChoices: View>: View {
     @AppStorage("layerPreviewMode") private var layerPreviewMode = LayerPreviewMode.content
     @State private var imageSelection: PhotosPickerItem?
     @State private var imageImport: Task<Void, Never>?
+    private struct CropRequest: Identifiable {
+        let id = UUID()
+        let pageID: UUID
+        let image: PageImage
+    }
+
+    @State private var cropRequest: CropRequest?
     @State private var editingImages = false
     @State private var editingText = false
     @State private var text = ""
@@ -180,6 +187,20 @@ struct NotebookEditor<SplitChoices: View>: View {
                 editPaper: editPaper,
                 move: movePages
             )
+        }
+        .sheet(item: $cropRequest) { request in
+            PageImageCropView(image: request.image) { region in
+                do {
+                    let cropped = try PageImageCrop.apply(region, to: request.image)
+                    return updatePage(on: request.pageID) { page in
+                        guard let index = page.images?.firstIndex(of: request.image) else { return }
+                        page.images?[index] = cropped
+                    }
+                } catch {
+                    library.issue = error.localizedDescription
+                    return false
+                }
+            }
         }
         .sheet(item: $inkSettingsTool) { tool in
             if tool == .marker {
@@ -400,6 +421,8 @@ struct NotebookEditor<SplitChoices: View>: View {
                         }
                     } remove: {
                         updatePage(on: pageID) { $0.images?.removeAll { $0.id == image.id } }
+                    } crop: {
+                        cropRequest = CropRequest(pageID: pageID, image: image)
                     }
                 }
             }
