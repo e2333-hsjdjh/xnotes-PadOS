@@ -48,12 +48,12 @@ struct LibraryView: View {
             (showTrash || (notebook.folderID.flatMap { folderIDs.contains($0) ? $0 : nil }) == currentFolder?.id) &&
             (query.isEmpty || notebook.title.localizedStandardContains(query) ||
                 notebook.pages.contains { $0.text.localizedStandardContains(query) })
-        }.sorted { sort.precedes($0, $1, descending: descending) }
+        }.sorted { sort.precedes($0, $1, descending: descending, size: library.documentSize) }
     }
 
     private var selectedForExport: [Notebook] {
         library.notebooks.filter { selectedDocuments.contains($0.id) && $0.trashedAt == nil }
-            .sorted { sort.precedes($0, $1, descending: descending) }
+            .sorted { sort.precedes($0, $1, descending: descending, size: library.documentSize) }
     }
 
     private var restorableSplit: SplitWorkspace? {
@@ -219,6 +219,7 @@ struct LibraryView: View {
                             Text("Name").tag(LibrarySort.name)
                             Text("Date modified").tag(LibrarySort.modified)
                             Text("Date created").tag(LibrarySort.created)
+                            Text("File size").tag(LibrarySort.size)
                         }
                         Toggle("Descending order", isOn: $descending)
                         Menu("Trash retention") {
@@ -346,7 +347,9 @@ struct LibraryView: View {
                     open(notebook.id)
                 }
             } label: {
-                entryLabel(Text(verbatim: notebook.title), symbol: documentSymbol(notebook))
+                entryLabel(Text(verbatim: notebook.title), symbol: documentSymbol(notebook),
+                           detail: sort == .size ? ByteCountFormatter.string(fromByteCount: library.documentSize(notebook),
+                                                                            countStyle: .file) : nil)
             }
             .accessibilityAddTraits(selectingDocuments && selectedDocuments.contains(notebook.id) ? .isSelected : [])
             .contextMenu {
@@ -391,25 +394,33 @@ struct LibraryView: View {
         return selectedDocuments.contains(notebook.id) ? "checkmark.circle.fill" : "circle"
     }
 
-    @ViewBuilder private func entryLabel(_ title: Text, symbol: String) -> some View {
+    @ViewBuilder private func entryLabel(_ title: Text, symbol: String, detail: String? = nil) -> some View {
         if layout == .grid {
             VStack(spacing: 8) {
                 Image(systemName: symbol).font(.title2)
                 title.font(.subheadline).lineLimit(2)
+                if let detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
             }
             .frame(maxWidth: .infinity, minHeight: 92)
             .padding(8)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
             .contentShape(Rectangle())
         } else {
-            Label { title } icon: { Image(systemName: symbol) }
+            Label {
+                VStack(alignment: .leading) {
+                    title
+                    if let detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
+                }
+            } icon: {
+                Image(systemName: symbol)
+            }
         }
     }
 
     private func paneDocuments(for pane: DocumentPane) -> [Notebook] {
         let neighbor = panes.first(where: { $0.id != pane.id })?.documentID
         return library.notebooks.filter { $0.trashedAt == nil && ($0.kind != .canvas || $0.id != neighbor) }
-            .sorted { sort.precedes($0, $1, descending: descending) }
+            .sorted { sort.precedes($0, $1, descending: descending, size: library.documentSize) }
     }
 
     private func replace(_ pane: DocumentPane, with document: UUID?) {

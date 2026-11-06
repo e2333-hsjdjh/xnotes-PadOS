@@ -8,6 +8,8 @@ import UniformTypeIdentifiers
 @MainActor @Observable
 final class LibraryStore {
     private(set) var notebooks: [Notebook] = []
+    private var noteBytes: [UUID: Int] = [:]
+    private var originalBytes: [String: Int] = [:]
     private(set) var folders: [LibraryFolder] = []
     private var folderCatalogReadable = true
     private(set) var unreadableCount = 0
@@ -30,13 +32,18 @@ final class LibraryStore {
             let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
             for file in files where file.pathExtension == "json" {
                 do {
-                    let notebook = try JSONDecoder().decode(Notebook.self, from: Data(contentsOf: file))
+                    let data = try Data(contentsOf: file)
+                    let notebook = try JSONDecoder().decode(Notebook.self, from: data)
                     guard file.deletingPathExtension().lastPathComponent == notebook.id.uuidString,
                           isValid(notebook) else { throw CocoaError(.fileReadCorruptFile) }
                     notebooks.append(notebook)
+                    noteBytes[notebook.id] = data.count
                 } catch {
                     unreadableCount += 1
                 }
+            }
+            for digest in Set(notebooks.compactMap(\.pdfDigest)) {
+                originalBytes[digest] = try? pdfURL(digest).resourceValues(forKeys: [.fileSizeKey]).fileSize
             }
             documentScanCompleted = true
         } catch {
@@ -167,7 +174,9 @@ final class LibraryStore {
         }
         updated.modified = .now
         let file = directory.appending(path: "\(updated.id.uuidString).json")
-        try JSONEncoder().encode(updated).write(to: file, options: .atomic)
+        let data = try JSONEncoder().encode(updated)
+        try data.write(to: file, options: .atomic)
+        noteBytes[updated.id] = data.count
         if let index = notebooks.firstIndex(where: { $0.id == updated.id }) {
             notebooks[index] = updated
         } else {
@@ -194,6 +203,7 @@ final class LibraryStore {
         }
         try FileManager.default.removeItem(at: file)
         notebooks.removeAll { $0.id == id }
+        noteBytes.removeValue(forKey: id)
         viewStates.remove(id)
     }
 
@@ -208,7 +218,9 @@ final class LibraryStore {
     @discardableResult
     func sweepUnreferencedPDFs(now: Date = .now) throws -> Set<String> {
         guard documentScanCompleted, unreadableCount == 0 else { return [] }
-        return try pdfResources.sweep(referenced: Set(notebooks.compactMap(\.pdfDigest)), now: now)
+        let removed = try pdfResources.sweep(referenced: Set(notebooks.compactMap(\.pdfDigest)), now: now)
+        for digest in removed { originalBytes.removeValue(forKey: digest) }
+        return removed
     }
 
     func restoreOriginalPDF(for documentID: UUID, from url: URL) throws {
@@ -236,6 +248,7 @@ final class LibraryStore {
         if (try? Data(contentsOf: destination, options: .mappedIfSafe)) != candidate {
             try candidate.write(to: destination, options: .atomic)
         }
+        originalBytes[expected] = candidate.count
         pdfRestorationRevision += 1
     }
 
@@ -308,6 +321,12 @@ final class LibraryStore {
         return notebook.id
     }
 
+    func documentSize(_ notebook: Notebook) -> Int64 {
+        let note = noteBytes[notebook.id] ?? 0
+        let pdf = notebook.pdfDigest.flatMap { originalBytes[$0] } ?? 0
+        return Int64(note) + Int64(pdf)
+    }
+
     func archive(for notebook: Notebook) throws -> Data {
         let pdf = try notebook.pdfDigest.map { expected in
             let data = try Data(contentsOf: pdfURL(expected), options: .mappedIfSafe)
@@ -373,6 +392,7 @@ final class LibraryStore {
         } else {
             try data.write(to: file, options: .atomic)
         }
+        originalBytes[hash] = data.count
         return hash
     }
 }
