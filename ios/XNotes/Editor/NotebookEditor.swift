@@ -15,6 +15,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     @Environment(\.colorScheme) private var scheme
     @State private var pdfMatchPage: UUID?
     @State private var pdfMatchRects: [CGRect] = []
+    @State private var pdfScrollTarget: PaperScrollTarget?
     @State private var selectedPageID: UUID?
     @State private var showPages = false
     @State private var zoom = PaperZoom()
@@ -99,7 +100,7 @@ struct NotebookEditor<SplitChoices: View>: View {
                     layerPanel
                     Divider()
                 }
-                PaperViewport(paperSize: paperSize, zoom: $zoom) { paper }
+                PaperViewport(paperSize: paperSize, scrollTarget: pdfScrollTarget, zoom: $zoom) { paper }
             }
             if notebook.kind != .canvas {
                 Divider()
@@ -154,7 +155,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             if pdfMatchPage != page.id { clearPDFMatches() }
             saveViewState()
         }
-        .sheet(isPresented: $showPages) {
+        .sheet(isPresented: $showPages, onDismiss: scrollToPDFMatch) {
             PageNavigator(
                 pages: notebook.pages,
                 current: page.id,
@@ -573,9 +574,15 @@ struct NotebookEditor<SplitChoices: View>: View {
         pdfMatchRects = PDFPageSearch.matchRects(on: original, query: query, displaySize: size)
     }
 
+    private func scrollToPDFMatch() {
+        guard pdfScrollTarget == nil, pdfMatchPage == page.id, let first = pdfMatchRects.first else { return }
+        pdfScrollTarget = PaperScrollTarget(point: CGPoint(x: first.midX, y: first.midY))
+    }
+
     private func clearPDFMatches() {
         pdfMatchPage = nil
         pdfMatchRects = []
+        pdfScrollTarget = nil
     }
 
     private func saveViewState() {
