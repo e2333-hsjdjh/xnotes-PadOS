@@ -10,12 +10,23 @@ struct PageNavigator: View {
     let add: () -> Void
     let duplicate: (Set<UUID>) -> Bool
     let delete: (Set<UUID>) -> Bool
+    let editPaper: (PagePaperEdit, Set<UUID>) -> Bool
     let move: (IndexSet, Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var deleting: Set<UUID> = []
     @State private var selecting = false
+    @State private var paperRequest: PaperRequest?
+
+    private struct PaperRequest: Identifiable {
+        enum Kind { case size, pattern }
+        let id = UUID()
+        let kind: Kind
+        let ids: Set<UUID>
+        let firstSize: NotebookPaperSize
+        let commonPattern: PaperPattern?
+    }
     @State private var selected: Set<UUID> = []
     @State private var editMode: EditMode = .inactive
     @State private var pdfMatches: [UUID: String] = [:]
@@ -96,6 +107,11 @@ struct PageNavigator: View {
                     ToolbarItemGroup(placement: .bottomBar) {
                         Text("\(selected.count) selected")
                         Spacer()
+                        Menu("Edit selected paper", systemImage: "doc") {
+                            Button("Paper size") { requestPaper(.size) }
+                            Button("Paper template") { requestPaper(.pattern) }
+                        }
+                        .disabled(selected.isEmpty)
                         Button("Duplicate pages", systemImage: "plus.square.on.square") {
                             if duplicate(selected) { endSelection() }
                         }
@@ -104,6 +120,18 @@ struct PageNavigator: View {
                             deleting = selected
                         }
                         .disabled(selected.isEmpty || selected.count >= pages.count)
+                    }
+                }
+            }
+            .sheet(item: $paperRequest) { request in
+                switch request.kind {
+                case .size:
+                    PaperSizePicker(size: request.firstSize) { size in
+                        applyPaper(.size(size), to: request.ids)
+                    }
+                case .pattern:
+                    PaperPicker(selection: request.commonPattern) { pattern in
+                        applyPaper(.pattern(pattern), to: request.ids)
                     }
                 }
             }
@@ -119,11 +147,26 @@ struct PageNavigator: View {
             .onChange(of: editable) {
                 if !editable {
                     endSelection()
+                    paperRequest = nil
                     deleting = []
                     editMode = .inactive
                 }
             }
         }
+    }
+
+    private func requestPaper(_ kind: PaperRequest.Kind) {
+        let targets = pages.filter { selected.contains($0.id) }
+        guard let first = targets.first else { return }
+        let patterns = Set(targets.map { $0.paperPattern ?? .blank })
+        paperRequest = PaperRequest(kind: kind, ids: selected, firstSize: first.paperSize ?? .letter,
+                                    commonPattern: patterns.count == 1 ? patterns.first : nil)
+    }
+
+    private func applyPaper(_ edit: PagePaperEdit, to ids: Set<UUID>) -> Bool {
+        guard editable, editPaper(edit, ids) else { return false }
+        endSelection()
+        return true
     }
 
     private func endSelection() {

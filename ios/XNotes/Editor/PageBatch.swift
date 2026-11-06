@@ -1,6 +1,29 @@
 import Foundation
 
+enum PagePaperEdit {
+    case size(NotebookPaperSize)
+    case pattern(PaperPattern)
+
+    func apply(to page: inout NotePage) {
+        switch self {
+        case .size(let size):
+            page.paperSize = size == .letter ? nil : size
+        case .pattern(let pattern):
+            page.paperPattern = pattern == .blank ? nil : pattern
+        }
+    }
+}
+
 enum PageBatch {
+    static func editPaper(_ edit: PagePaperEdit, for ids: Set<UUID>, in pages: [NotePage]) -> [NotePage] {
+        pages.map { page in
+            guard ids.contains(page.id) else { return page }
+            var updated = page
+            edit.apply(to: &updated)
+            return updated
+        }
+    }
+
     static func duplicate(_ ids: Set<UUID>, in pages: [NotePage]) -> (pages: [NotePage], firstCopy: UUID)? {
         var firstCopy: UUID?
         var result: [NotePage] = []

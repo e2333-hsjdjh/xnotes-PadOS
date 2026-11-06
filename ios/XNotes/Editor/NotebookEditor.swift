@@ -110,19 +110,20 @@ struct NotebookEditor<SplitChoices: View>: View {
                 add: addPage,
                 duplicate: duplicatePages,
                 delete: deletePages,
+                editPaper: editPaper,
                 move: movePages
             )
         }
         .sheet(isPresented: $showPaper) {
             let targetID = page.id
             PaperPicker(selection: page.paperPattern ?? .blank) { pattern in
-                updatePage(on: targetID) { $0.paperPattern = pattern == .blank ? nil : pattern }
+                editPaper(.pattern(pattern), ids: [targetID])
             }
         }
         .sheet(isPresented: $showPaperSize) {
             let targetID = page.id
             PaperSizePicker(size: page.paperSize ?? .letter) { size in
-                updatePage(on: targetID) { $0.paperSize = size }
+                editPaper(.size(size), ids: [targetID])
             }
         }
         .sheet(isPresented: $editingText) {
@@ -317,6 +318,15 @@ struct NotebookEditor<SplitChoices: View>: View {
         guard save(updated) else { return false }
         selectedPageID = result.current
         return true
+    }
+
+    private func editPaper(_ edit: PagePaperEdit, ids: Set<UUID>) -> Bool {
+        guard !readOnly, notebook.kind == .notebook, var updated = latestNotebook,
+              updated.pages.contains(where: { ids.contains($0.id) }) else { return false }
+        let edited = PageBatch.editPaper(edit, for: ids, in: updated.pages)
+        if edited == updated.pages { return true }
+        updated.pages = edited
+        return save(updated)
     }
 
     private func movePages(_ indices: IndexSet, _ destination: Int) {

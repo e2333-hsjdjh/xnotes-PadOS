@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct PaperPicker: View {
-    let selection: PaperPattern
-    let select: (PaperPattern) -> Void
+    let selection: PaperPattern?
+    let select: (PaperPattern) -> Bool
 
     @Environment(\.dismiss) private var dismiss
 
@@ -10,8 +10,7 @@ struct PaperPicker: View {
         NavigationStack {
             List(PaperPattern.allCases) { pattern in
                 Button {
-                    select(pattern)
-                    dismiss()
+                    if select(pattern) { dismiss() }
                 } label: {
                     HStack(spacing: 16) {
                         PaperPatternView(pattern: pattern, dark: false, preview: true)
