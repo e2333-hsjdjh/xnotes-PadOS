@@ -8,7 +8,8 @@ struct LibraryView: View {
     @State private var showTrash = false
     @State private var importing = false
     @State private var exporting = false
-    @State private var export = ArchiveFile()
+    @State private var export = ExportFile()
+    @State private var exportType: UTType = .xnotesArchive
     @State private var exportTitle = ""
     @State private var primaryID: UUID?
     @State private var secondaryID: UUID?
@@ -47,7 +48,7 @@ struct LibraryView: View {
                 secondaryID = nil
             }
         }
-        .fileExporter(isPresented: $exporting, document: export, contentType: .xnotesArchive, defaultFilename: exportTitle) {
+        .fileExporter(isPresented: $exporting, document: export, contentType: exportType, defaultFilename: exportTitle) {
             if case .failure(let error) = $0 { library.issue = error.localizedDescription }
         }
         .alert("Storage error", isPresented: Binding(
@@ -107,6 +108,9 @@ struct LibraryView: View {
                                 renaming = notebook
                             }
                             Button("Export backup", systemImage: "square.and.arrow.up") { exportNotebook(notebook) }
+                            if notebook.kind != .canvas {
+                                Button("Export PDF", systemImage: "doc.richtext") { exportPDF(notebook) }
+                            }
                             Button("Move to Trash", systemImage: "trash", role: .destructive) { setTrashed(notebook, true) }
                         }
                     }
@@ -168,7 +172,17 @@ struct LibraryView: View {
 
     private func exportNotebook(_ notebook: Notebook) {
         perform {
-            export = ArchiveFile(data: try library.archive(for: notebook))
+            export = ExportFile(data: try library.archive(for: notebook))
+            exportType = .xnotesArchive
+            exportTitle = notebook.title
+            exporting = true
+        }
+    }
+
+    private func exportPDF(_ notebook: Notebook) {
+        perform {
+            export = ExportFile(data: try NotebookPDFExport.data(for: notebook, source: library.pdf(for: notebook)))
+            exportType = .pdf
             exportTitle = notebook.title
             exporting = true
         }
@@ -179,8 +193,8 @@ struct LibraryView: View {
     }
 }
 
-private struct ArchiveFile: FileDocument {
-    static let readableContentTypes: [UTType] = [.xnotesArchive]
+private struct ExportFile: FileDocument {
+    static let readableContentTypes: [UTType] = [.xnotesArchive, .pdf]
     var data = Data()
 
     init(data: Data = Data()) { self.data = data }

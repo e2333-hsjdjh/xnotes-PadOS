@@ -374,10 +374,11 @@ struct NotebookEditor<SplitChoices: View>: View {
             pdfImage = nil
             return
         }
-        let size = page.bounds(for: .cropBox).size
-        guard size.width > 0, size.height > 0 else { return }
-        let scale = 792 / max(size.width, size.height)
-        pdfImage = page.thumbnail(of: CGSize(width: size.width * scale, height: size.height * scale), for: .cropBox)
+        guard let size = try? NotebookPDFExport.thumbnailRequest(page) else {
+            pdfImage = nil
+            return
+        }
+        pdfImage = page.thumbnail(of: size, for: .cropBox)
     }
 
     private func updateLayer(_ id: UUID, on pageID: UUID? = nil, _ change: (inout DrawingLayer) -> Void) {
