@@ -15,6 +15,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     @Environment(\.colorScheme) private var scheme
     @State private var selectedPageID: UUID?
     @State private var showPages = false
+    @State private var zoom = PaperZoom()
     @State private var showPaper = false
     @State private var showPaperSize = false
     @State private var selectedLayer: UUID?
@@ -94,11 +95,7 @@ struct NotebookEditor<SplitChoices: View>: View {
                     layerPanel
                     Divider()
                 }
-                ScrollView([.horizontal, .vertical]) {
-                    paper.padding(16)
-                }
-                .background(Color(uiColor: .secondarySystemBackground))
-                .accessibilityIdentifier("editor.paper")
+                PaperViewport(paperSize: paperSize, zoom: $zoom) { paper }
             }
             if notebook.kind != .canvas {
                 Divider()
@@ -220,6 +217,17 @@ struct NotebookEditor<SplitChoices: View>: View {
                 if readOnly { Text("Read-only view").font(.caption).foregroundStyle(.secondary) }
             }
             Spacer()
+            Menu {
+                Button("Fit width") { zoom.mode = .fitWidth }
+                    .disabled(zoom.locked)
+                Button("Actual size") { zoom.mode = .manual(1) }
+                    .disabled(zoom.locked)
+                Toggle("Lock zoom", isOn: $zoom.locked)
+            } label: {
+                Image(systemName: zoom.locked ? "lock" : "magnifyingglass")
+                    .frame(minWidth: 48, minHeight: 48)
+            }
+            .accessibilityLabel(Text("Zoom"))
             Menu("Split view", systemImage: "rectangle.split.2x1") {
                 splitChoices()
             }

@@ -163,3 +163,7 @@
 "Eraser mode" = "橡皮模式";
 "Erase whole stroke" = "整笔擦除";
 "Erase part of stroke" = "局部擦除";
+"Zoom" = "缩放";
+"Fit width" = "适合宽度";
+"Actual size" = "实际大小";
+"Lock zoom" = "锁定缩放";
