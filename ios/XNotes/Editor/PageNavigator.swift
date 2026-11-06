@@ -43,6 +43,7 @@ struct PageNavigator: View {
         let ids: Set<UUID>
         let firstSize: NotebookPaperSize
         let commonPattern: PaperPattern?
+        let commonParameters: PaperPatternParameters?
     }
     @State private var selected: Set<UUID> = []
     @State private var editMode: EditMode = .inactive
@@ -199,8 +200,8 @@ struct PageNavigator: View {
                         applyPaper(.size(size), to: request.ids)
                     }
                 case .pattern:
-                    PaperPicker(selection: request.commonPattern) { pattern in
-                        applyPaper(.pattern(pattern), to: request.ids)
+                    PaperPicker(selection: request.commonPattern, parameters: request.commonParameters) { pattern, parameters in
+                        applyPaper(.pattern(pattern, parameters), to: request.ids)
                     }
                 }
             }
@@ -248,7 +249,10 @@ struct PageNavigator: View {
         guard let first = targets.first else { return }
         let patterns = Set(targets.map { $0.paperPattern ?? .blank })
         paperRequest = PaperRequest(kind: kind, ids: selected, firstSize: first.paperSize ?? .letter,
-                                    commonPattern: patterns.count == 1 ? patterns.first : nil)
+                                    commonPattern: patterns.count == 1 ? patterns.first : nil,
+                                    commonParameters: patterns.count == 1 && targets.allSatisfy {
+                                        $0.paperParameters == first.paperParameters
+                                    } ? first.paperParameters : nil)
     }
 
     private func applyPaper(_ edit: PagePaperEdit, to ids: Set<UUID>) -> Bool {

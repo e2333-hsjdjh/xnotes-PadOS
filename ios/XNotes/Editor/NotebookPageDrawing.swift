@@ -49,7 +49,7 @@ enum NotebookPageDrawing {
         } else if let artwork = page.coverArtwork {
             artwork.draw(in: graphics, size: bounds.size, parameters: page.coverParameters)
         } else if let pattern = page.paperPattern {
-            pattern.draw(in: graphics, size: bounds.size, dark: dark)
+            pattern.draw(in: graphics, size: bounds.size, dark: dark, parameters: page.paperParameters)
         }
         try drawContents(page, in: bounds, visible: visible, inkScale: inkScale, dark: page.coverArtwork?.usesLightInk ?? dark)
     }
@@ -98,7 +98,14 @@ enum NotebookPageDrawing {
     @MainActor
     static func render(_ page: NotePage, original: PDFPage?, longestEdge: CGFloat,
                        canvas: Bool = false, dark: Bool = false) throws -> UIImage {
-        let paper = canvas ? canvasSize : try original.map(PDFPageGeometry.displaySize) ?? (page.paperSize ?? .letter).dimensions
+        let paper: CGSize
+        if canvas {
+            paper = canvasSize
+        } else if let original {
+            paper = try PDFPageGeometry.displaySize(original)
+        } else {
+            paper = (page.paperSize ?? .letter).dimensions
+        }
         let crop = canvas ? try canvasCrop(page) : nil
         let size = crop?.size ?? paper
         let scale = longestEdge / max(size.width, size.height)

@@ -250,8 +250,8 @@ struct NotebookEditor<SplitChoices: View>: View {
         }
         .sheet(isPresented: $showPaper) {
             let targetID = page.id
-            PaperPicker(selection: page.paperPattern ?? .blank) { pattern in
-                editPaper(.pattern(pattern), ids: [targetID])
+            PaperPicker(selection: page.paperPattern ?? .blank, parameters: page.paperParameters) { pattern, parameters in
+                editPaper(.pattern(pattern, parameters), ids: [targetID])
             }
         }
         .sheet(isPresented: $showPaperSize) {
@@ -435,7 +435,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             if let artwork = page.coverArtwork {
                 NotebookCoverArtwork(cover: artwork, parameters: page.coverParameters)
             } else if let pattern = page.paperPattern, notebook.kind == .notebook, page.pdfBackground == nil {
-                PaperPatternView(pattern: pattern, dark: darkPaper)
+                PaperPatternView(pattern: pattern, dark: darkPaper, parameters: page.paperParameters)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }

@@ -2,14 +2,15 @@ import Foundation
 
 enum PagePaperEdit {
     case size(NotebookPaperSize)
-    case pattern(PaperPattern)
+    case pattern(PaperPattern, PaperPatternParameters? = nil)
 
     func apply(to page: inout NotePage) {
         switch self {
         case .size(let size):
             page.paperSize = size == .letter ? nil : size
-        case .pattern(let pattern):
+        case .pattern(let pattern, let parameters):
             page.paperPattern = pattern == .blank ? nil : pattern
+            page.paperParameters = pattern == .blank ? nil : parameters
             page.coverArtwork = nil
             page.coverParameters = nil
         }

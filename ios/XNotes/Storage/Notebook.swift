@@ -75,6 +75,7 @@ struct NotePage: Codable, Identifiable, Equatable {
     var coverArtwork: NotebookCover?
     var coverParameters: NotebookCoverParameters?
     var paperPattern: PaperPattern?
+    var paperParameters: PaperPatternParameters?
     var paperSize: NotebookPaperSize?
     var layers = [DrawingLayer(name: String(localized: "Layer 1"))]
 }

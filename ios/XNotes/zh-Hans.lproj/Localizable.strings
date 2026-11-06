@@ -215,3 +215,9 @@
 "Label border" = "标签边线";
 "Cloth color" = "布纹颜色";
 "Restore default cover settings" = "恢复默认封面参数";
+"Template spacing" = "模板间距";
+"Header height" = "页眉高度";
+"Margin width" = "边线宽度";
+"Template opacity" = "模板不透明度";
+"Restore default paper settings" = "恢复默认纸张参数";
+"%.1f mm" = "%.1f 毫米";
