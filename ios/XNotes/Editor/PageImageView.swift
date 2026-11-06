@@ -11,7 +11,7 @@ struct PageImageView: View {
     @GestureState private var translation = CGSize.zero
 
     var body: some View {
-        let frame = positioned(translation)
+        let frame = translation == .zero ? image.frame : positioned(translation)
         Group {
             if editing {
                 bitmap

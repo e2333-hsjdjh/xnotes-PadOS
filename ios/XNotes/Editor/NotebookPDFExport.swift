@@ -11,7 +11,7 @@ enum NotebookPDFExport {
 
         let pages = try notebook.pages.enumerated().map { index, page in
             let original = source?.page(at: index)
-            let size = try original.map(displaySize) ?? CGSize(width: 612, height: 792)
+            let size = try original.map(displaySize) ?? (page.paperSize ?? .letter).dimensions
             return (page, original, CGRect(origin: .zero, size: size))
         }
         var renderError: Error?

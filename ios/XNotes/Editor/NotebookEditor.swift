@@ -14,6 +14,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     @State private var selectedPageID: UUID?
     @State private var showPages = false
     @State private var showPaper = false
+    @State private var showPaperSize = false
     @State private var selectedLayer: UUID?
     @State private var tool: InkTool = .pen
     @State private var width = 3.0
@@ -44,7 +45,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     private var paperSize: CGSize {
         if let pdfImage { return pdfImage.size }
         if notebook.kind == .canvas { return CGSize(width: 2048, height: 2048) }
-        return CGSize(width: 612, height: 792)
+        return (page.paperSize ?? .letter).dimensions
     }
 
     var body: some View {
@@ -84,6 +85,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             editingImages = false
             editingText = false
             showPaper = false
+            showPaperSize = false
             layerToRename = nil
         }
         .onChange(of: imageSelection) {
@@ -112,6 +114,12 @@ struct NotebookEditor<SplitChoices: View>: View {
             let targetID = page.id
             PaperPicker(selection: page.paperPattern ?? .blank) { pattern in
                 updatePage(on: targetID) { $0.paperPattern = pattern == .blank ? nil : pattern }
+            }
+        }
+        .sheet(isPresented: $showPaperSize) {
+            let targetID = page.id
+            PaperSizePicker(size: page.paperSize ?? .letter) { size in
+                updatePage(on: targetID) { $0.paperSize = size }
             }
         }
         .sheet(isPresented: $editingText) {
@@ -184,6 +192,7 @@ struct NotebookEditor<SplitChoices: View>: View {
                     .disabled(!editingImages && page.images?.isEmpty != false)
                 if notebook.kind == .notebook {
                     icon("Paper template", "rectangle.grid.2x2") { showPaper = true }
+                    icon("Paper size", "arrow.up.left.and.arrow.down.right") { showPaperSize = true }
                 }
                 icon("Layers", "square.3.layers.3d", selected: showLayers) { showLayers.toggle() }
                 Menu("Ink settings", systemImage: "slider.horizontal.3") {
@@ -275,7 +284,8 @@ struct NotebookEditor<SplitChoices: View>: View {
 
     private func addPage() {
         var updated = notebook
-        let newPage = NotePage()
+        var newPage = NotePage()
+        newPage.paperSize = page.paperSize
         updated.pages.insert(newPage, at: pageIndex + 1)
         if save(updated) { selectedPageID = newPage.id }
     }
@@ -453,12 +463,12 @@ struct NotebookEditor<SplitChoices: View>: View {
         }
     }
 
-    private func updatePage(on pageID: UUID? = nil, _ change: (inout NotePage) -> Void) {
+    @discardableResult private func updatePage(on pageID: UUID? = nil, _ change: (inout NotePage) -> Void) -> Bool {
         var updated = library.notebooks.first { $0.id == notebook.id } ?? notebook
         let targetID = pageID ?? page.id
-        guard let index = updated.pages.firstIndex(where: { $0.id == targetID }) else { return }
+        guard let index = updated.pages.firstIndex(where: { $0.id == targetID }) else { return false }
         change(&updated.pages[index])
-        _ = save(updated)
+        return save(updated)
     }
 
     @discardableResult private func save(_ updated: Notebook) -> Bool {

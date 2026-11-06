@@ -98,3 +98,15 @@
 "Date modified" = "修改时间";
 "Date created" = "创建时间";
 "Descending order" = "降序";
+"Paper size" = "纸张尺寸";
+"Width (mm)" = "宽度（毫米）";
+"Height (mm)" = "高度（毫米）";
+"Enter a width and height between 20 and 1,000 mm." = "请输入 20 至 1000 毫米之间的宽度和高度。";
+"Orientation" = "方向";
+"Portrait" = "纵向";
+"Landscape" = "横向";
+"Apply" = "应用";
+"Letter" = "美式信纸";
+"Legal" = "美式法律纸";
+"Custom" = "自定义";
+"Content keeps its position. A smaller page can hide content beyond its edges." = "内容会保留原位置。缩小纸张可能隐藏超出页面边缘的内容。";
