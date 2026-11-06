@@ -73,6 +73,22 @@ final class LibraryStore {
         try writeFolders(updated)
     }
 
+    func moveFolder(_ id: UUID, to parentID: UUID?) throws {
+        guard folderCatalogReadable, let index = folders.firstIndex(where: { $0.id == id }) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        if let parentID {
+            guard folders.contains(where: { $0.id == parentID }),
+                  !LibraryFolder.subtree(root: id, in: folders).contains(parentID) else {
+                throw CocoaError(.fileWriteInvalidFileName)
+            }
+        }
+        guard folders[index].parentID != parentID else { return }
+        var updated = folders
+        updated[index].parentID = parentID
+        try writeFolders(updated)
+    }
+
     func deleteFolder(_ folder: LibraryFolder) throws {
         guard folderCatalogReadable, unreadableCount == 0,
               !folders.contains(where: { $0.parentID == folder.id }),

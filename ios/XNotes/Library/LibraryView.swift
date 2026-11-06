@@ -12,8 +12,7 @@ struct LibraryView: View {
     @State private var folderID: UUID?
     @State private var folderDraft: LibraryFolder?
     @State private var folderName = ""
-    @State private var showFolders = false
-    @State private var movingDocuments: Set<UUID> = []
+    @State private var folderRequest: FolderRequest?
     @State private var selectingDocuments = false
     @State private var selectedDocuments: Set<UUID> = []
     @State private var showTrash = false
@@ -112,13 +111,16 @@ struct LibraryView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
-        .sheet(isPresented: $showFolders, onDismiss: { movingDocuments = [] }) {
-            FolderPicker(folders: library.folders) { destination in
-                if !movingDocuments.isEmpty {
-                    applyBatch(.move(destination), to: movingDocuments)
-                } else {
+        .sheet(item: $folderRequest) { request in
+            FolderPicker(folders: folderDestinations(for: request)) { destination in
+                switch request.action {
+                case .browse:
                     folderID = destination
                     query = ""
+                case .moveDocuments(let ids):
+                    applyBatch(.move(destination), to: ids)
+                case .moveFolder(let id):
+                    perform { try library.moveFolder(id, to: destination) }
                 }
             }
         }
@@ -158,7 +160,7 @@ struct LibraryView: View {
                             query = ""
                         }
                         if !showTrash {
-                            Button("Folders", systemImage: "folder") { showFolders = true }
+                            Button("Folders", systemImage: "folder") { folderRequest = FolderRequest(action: .browse) }
                         }
                         Picker("Layout", selection: $layout) {
                             Text("List").tag(LibraryLayout.list)
@@ -207,8 +209,7 @@ struct LibraryView: View {
                             .disabled(selectedDocuments.isEmpty)
                         } else {
                             Button("Move selected documents", systemImage: "folder") {
-                                movingDocuments = selectedDocuments
-                                showFolders = true
+                                folderRequest = FolderRequest(action: .moveDocuments(selectedDocuments))
                             }
                             .disabled(selectedDocuments.isEmpty)
                             Button("Export selected documents as PDF", systemImage: "square.and.arrow.up") {
@@ -248,6 +249,9 @@ struct LibraryView: View {
             }
             .contextMenu {
                 Button("Rename", systemImage: "pencil") { editFolder(folder) }
+                Button("Move folder", systemImage: "folder") {
+                    folderRequest = FolderRequest(action: .moveFolder(folder.id))
+                }
                 Button("Delete empty folder", systemImage: "trash", role: .destructive) {
                     perform { try library.deleteFolder(folder) }
                 }
@@ -291,8 +295,7 @@ struct LibraryView: View {
                 renaming = notebook
             }
             Button("Move to folder", systemImage: "folder") {
-                movingDocuments = [notebook.id]
-                showFolders = true
+                folderRequest = FolderRequest(action: .moveDocuments([notebook.id]))
             }
             Button("Export backup", systemImage: "square.and.arrow.up") { exportNotebook(notebook) }
             Button("Export PDF", systemImage: "doc.richtext") { exportPDF(notebook) }
@@ -366,6 +369,12 @@ struct LibraryView: View {
         }
     }
 
+    private func folderDestinations(for request: FolderRequest) -> [LibraryFolder] {
+        guard case .moveFolder(let id) = request.action else { return library.folders }
+        let excluded = LibraryFolder.subtree(root: id, in: library.folders)
+        return library.folders.filter { !excluded.contains($0.id) }
+    }
+
     private func editFolder(_ folder: LibraryFolder) {
         folderName = folder.name
         folderDraft = folder
@@ -424,4 +433,15 @@ struct LibraryView: View {
 private struct DocumentPane: Identifiable {
     let id = UUID()
     var documentID: UUID
+}
+
+private struct FolderRequest: Identifiable {
+    enum Action {
+        case browse
+        case moveDocuments(Set<UUID>)
+        case moveFolder(UUID)
+    }
+
+    let id = UUID()
+    let action: Action
 }

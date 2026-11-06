@@ -142,3 +142,4 @@
 "%lld documents could not be updated. %@" = "%lld 份文档未能更新。%@";
 "Export selected documents as PDF" = "将所选文档导出为 PDF";
 "Selected documents" = "所选文档";
+"Move folder" = "移动文件夹";

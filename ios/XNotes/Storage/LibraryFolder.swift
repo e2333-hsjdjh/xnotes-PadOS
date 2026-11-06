@@ -4,6 +4,17 @@ struct LibraryFolder: Codable, Identifiable {
     var id = UUID()
     var name: String
     var parentID: UUID?
+
+    static func subtree(root: UUID, in folders: [Self]) -> Set<UUID> {
+        let groups = Dictionary(grouping: folders, by: \.parentID)
+        var pending = [root]
+        var visited: Set<UUID> = []
+        while let id = pending.popLast() {
+            guard visited.insert(id).inserted else { continue }
+            pending.append(contentsOf: (groups[id] ?? []).map(\.id))
+        }
+        return visited
+    }
 }
 
 struct FolderBranch: Identifiable {
