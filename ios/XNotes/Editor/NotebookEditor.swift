@@ -1,5 +1,6 @@
 import PDFKit
 import PencilKit
+import PhotosUI
 import SwiftUI
 
 struct NotebookEditor<SplitChoices: View>: View {
@@ -16,6 +17,9 @@ struct NotebookEditor<SplitChoices: View>: View {
     @State private var width = 3.0
     @State private var pencilOnly = false
     @State private var showLayers = false
+    @State private var imageSelection: PhotosPickerItem?
+    @State private var imageImport: Task<Void, Never>?
+    @State private var editingImages = false
     @State private var editingText = false
     @State private var text = ""
     @State private var layerToRename: UUID?
@@ -66,8 +70,13 @@ struct NotebookEditor<SplitChoices: View>: View {
             pdf = library.pdf(for: notebook)
             loadBackground()
         }
+        .onDisappear { imageImport?.cancel() }
+        .onChange(of: imageSelection) {
+            if let imageSelection { importImage(imageSelection) }
+        }
         .onChange(of: page.id) {
             selectedLayer = nil
+            editingImages = false
             loadBackground()
         }
         .sheet(isPresented: $showPages) {
@@ -140,6 +149,13 @@ struct NotebookEditor<SplitChoices: View>: View {
                     text = page.text
                     editingText = true
                 }
+                PhotosPicker(selection: $imageSelection, matching: .images) {
+                    Image(systemName: "photo.badge.plus")
+                        .frame(minWidth: 48, minHeight: 48)
+                        .accessibilityLabel(Text("Insert image"))
+                }
+                icon("Arrange images", "move.3d", selected: editingImages) { editingImages.toggle() }
+                    .disabled(!editingImages && page.images?.isEmpty != false)
                 icon("Layers", "square.3.layers.3d", selected: showLayers) { showLayers.toggle() }
                 Menu("Ink settings", systemImage: "slider.horizontal.3") {
                     Picker("Width", selection: $width) {
@@ -165,6 +181,11 @@ struct NotebookEditor<SplitChoices: View>: View {
             } else if notebook.kind == .pdf {
                 Text("Original PDF unavailable").foregroundStyle(.black).padding()
             }
+            if !editingImages {
+                ForEach(page.images ?? []) { image in
+                    PageImageView(image: image, editing: false, paperSize: paperSize, move: { _ in }, remove: {})
+                }
+            }
             Text(page.text)
                 .foregroundStyle(darkPaper ? .white : .black)
                 .padding(24)
@@ -178,9 +199,22 @@ struct NotebookEditor<SplitChoices: View>: View {
                         history: history
                     )
                     .id(layer.id)
+                    .allowsHitTesting(!editingImages)
                 } else {
                     LayerImage(ink: layer.ink)
                         .allowsHitTesting(false)
+                }
+            }
+            if editingImages {
+                ForEach(page.images ?? []) { image in
+                    PageImageView(image: image, editing: true, paperSize: paperSize) { frame in
+                        updatePage(on: pageID) { page in
+                            guard let index = page.images?.firstIndex(where: { $0.id == image.id }) else { return }
+                            page.images?[index].frame = frame
+                        }
+                    } remove: {
+                        updatePage(on: pageID) { $0.images?.removeAll { $0.id == image.id } }
+                    }
                 }
             }
         }
@@ -217,6 +251,13 @@ struct NotebookEditor<SplitChoices: View>: View {
         guard let index = updated.pages.firstIndex(where: { $0.id == id }) else { return }
         var copy = updated.pages[index]
         copy.id = UUID()
+        if let images = copy.images {
+            copy.images = images.map { image in
+                var copy = image
+                copy.id = UUID()
+                return copy
+            }
+        }
         for index in copy.layers.indices { copy.layers[index].id = UUID() }
         updated.pages.insert(copy, at: index + 1)
         if save(updated) { selectedPageID = copy.id }
@@ -302,6 +343,30 @@ struct NotebookEditor<SplitChoices: View>: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(label))
+    }
+
+    private func importImage(_ item: PhotosPickerItem) {
+        imageImport?.cancel()
+        let targetID = page.id
+        let size = paperSize
+        imageImport = Task {
+            defer { if !Task.isCancelled { imageSelection = nil } }
+            do {
+                guard let original = try await item.loadTransferable(type: Data.self) else {
+                    throw CocoaError(.fileReadCorruptFile)
+                }
+                let image = try PageImageView.prepare(original, for: size)
+                try Task.checkCancellation()
+                updatePage(on: targetID) { page in
+                    page.images = (page.images ?? []) + [image]
+                }
+                if targetID == page.id { editingImages = true }
+            } catch is CancellationError {
+                return
+            } catch {
+                if !Task.isCancelled { library.issue = error.localizedDescription }
+            }
+        }
     }
 
     private func loadBackground() {

@@ -91,7 +91,8 @@ final class LibraryStore {
         guard !notebook.pages.isEmpty,
               Set(notebook.pages.map(\.id)).count == notebook.pages.count,
               notebook.pages.allSatisfy({ page in
-                  !page.layers.isEmpty && Set(page.layers.map(\.id)).count == page.layers.count
+                  !page.layers.isEmpty && Set(page.layers.map(\.id)).count == page.layers.count &&
+                  validImages(page.images ?? [])
               }) else { return false }
         if notebook.kind == .pdf {
             guard let digest = notebook.pdfDigest else { return false }
@@ -100,6 +101,15 @@ final class LibraryStore {
             }
         }
         return notebook.pdfDigest == nil && (notebook.kind != .canvas || notebook.pages.count == 1)
+    }
+
+    private func validImages(_ images: [PageImage]) -> Bool {
+        Set(images.map(\.id)).count == images.count && images.allSatisfy { image in
+            let frame = image.frame
+            return [frame.origin.x, frame.origin.y, frame.width, frame.height].allSatisfy(\.isFinite) &&
+                frame.origin.x >= 0 && frame.origin.y >= 0 &&
+                frame.width > 0 && frame.height > 0 && !image.data.isEmpty
+        }
     }
 
     private func pageCount(_ data: Data) throws -> Int {

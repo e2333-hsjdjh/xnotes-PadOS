@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 enum NotebookKind: String, Codable, CaseIterable {
@@ -20,9 +21,37 @@ struct DrawingLayer: Codable, Identifiable {
     var ink = Data()
 }
 
+struct PageImage: Codable, Identifiable {
+    var id = UUID()
+    let data: Data
+    private var x: CGFloat
+    private var y: CGFloat
+    private var width: CGFloat
+    private var height: CGFloat
+
+    var frame: CGRect {
+        get { CGRect(x: x, y: y, width: width, height: height) }
+        set {
+            x = newValue.origin.x
+            y = newValue.origin.y
+            width = newValue.width
+            height = newValue.height
+        }
+    }
+
+    init(data: Data, frame: CGRect) {
+        self.data = data
+        x = frame.origin.x
+        y = frame.origin.y
+        width = frame.width
+        height = frame.height
+    }
+}
+
 struct NotePage: Codable, Identifiable {
     var id = UUID()
     var text = ""
+    var images: [PageImage]?
     var layers = [DrawingLayer(name: String(localized: "Layer 1"))]
 }
 
