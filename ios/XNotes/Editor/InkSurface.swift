@@ -1,11 +1,13 @@
 import PencilKit
 import SwiftUI
 
-enum InkTool: String, CaseIterable {
+enum InkTool: String, CaseIterable, Identifiable {
     case pen = "pencil.tip"
     case marker = "highlighter"
     case eraser = "eraser"
     case lasso = "lasso"
+
+    var id: Self { self }
 
     func pencilTool(color: UIColor, width: CGFloat) -> any PKTool {
         switch self {

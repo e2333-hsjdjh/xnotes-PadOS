@@ -25,3 +25,20 @@ enum InkColor: String, CaseIterable {
         }
     }
 }
+
+enum CustomInkColor {
+    static func decode(_ hex: String) -> UIColor? {
+        guard hex.utf8.count == 6, let rgb = UInt32(hex, radix: 16) else { return nil }
+        return UIColor(red: CGFloat((rgb >> 16) & 255) / 255,
+                       green: CGFloat((rgb >> 8) & 255) / 255,
+                       blue: CGFloat(rgb & 255) / 255, alpha: 1)
+    }
+
+    static func encode(_ color: UIColor) -> String? {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let rgb = color.cgColor.converted(to: space, intent: .relativeColorimetric, options: nil),
+              let components = rgb.components, components.count == 4 else { return nil }
+        let bytes = components.prefix(3).map { Int((min(max($0, 0), 1) * 255).rounded()) }
+        return String(format: "%02X%02X%02X", bytes[0], bytes[1], bytes[2])
+    }
+}

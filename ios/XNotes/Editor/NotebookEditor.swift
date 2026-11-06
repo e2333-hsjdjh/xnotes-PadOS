@@ -23,6 +23,9 @@ struct NotebookEditor<SplitChoices: View>: View {
     @AppStorage("markerWidth") private var markerWidth = 9.0
     @AppStorage("penColor") private var penColor = InkColor.black
     @AppStorage("markerColor") private var markerColor = InkColor.yellow
+    @AppStorage("penCustomColor") private var penCustomColor = ""
+    @AppStorage("markerCustomColor") private var markerCustomColor = ""
+    @State private var inkSettingsTool: InkTool?
     @AppStorage("pencilOnly") private var pencilOnly = false
     @State private var showLayers = false
     @State private var layerEditMode: EditMode = .inactive
@@ -125,6 +128,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             showPaper = false
             showPaperSize = false
             layerToRename = nil
+            inkSettingsTool = nil
         }
         .onChange(of: imageSelection) {
             if let imageSelection { importImage(imageSelection) }
@@ -155,6 +159,13 @@ struct NotebookEditor<SplitChoices: View>: View {
                 editPaper: editPaper,
                 move: movePages
             )
+        }
+        .sheet(item: $inkSettingsTool) { tool in
+            if tool == .marker {
+                InkSettingsView(tool: tool, preset: $markerColor, custom: $markerCustomColor, width: $markerWidth)
+            } else {
+                InkSettingsView(tool: tool, preset: $penColor, custom: $penCustomColor, width: $penWidth)
+            }
         }
         .sheet(isPresented: $showPaper) {
             let targetID = page.id
@@ -244,12 +255,8 @@ struct NotebookEditor<SplitChoices: View>: View {
                 }
                 icon("Layers", "square.3.layers.3d", selected: showLayers) { showLayers.toggle() }
                 Menu("Ink settings", systemImage: "slider.horizontal.3") {
-                    Menu("Pen") {
-                        inkSettings(color: $penColor, width: $penWidth, widths: [1.5, 3, 7])
-                    }
-                    Menu("Highlighter") {
-                        inkSettings(color: $markerColor, width: $markerWidth, widths: [5, 9, 18])
-                    }
+                    Button("Pen") { inkSettingsTool = .pen }
+                    Button("Highlighter") { inkSettingsTool = .marker }
                     Toggle("Apple Pencil only", isOn: $pencilOnly)
                 }
                 .frame(minWidth: 48, minHeight: 48)
@@ -259,17 +266,9 @@ struct NotebookEditor<SplitChoices: View>: View {
         .scrollIndicators(.hidden)
     }
 
-    @ViewBuilder private func inkSettings(color: Binding<InkColor>, width: Binding<Double>, widths: [Double]) -> some View {
-        Picker("Ink color", selection: color) {
-            ForEach(InkColor.allCases, id: \.self) { option in
-                Text(option.label).tag(option)
-            }
-        }
-        Picker("Width", selection: width) {
-            Text("Thin").tag(widths[0])
-            Text("Medium").tag(widths[1])
-            Text("Thick").tag(widths[2])
-        }
+    private var activeInkColor: UIColor {
+        if tool == .marker { return CustomInkColor.decode(markerCustomColor) ?? markerColor.color }
+        return CustomInkColor.decode(penCustomColor) ?? penColor.color
     }
 
     private var paper: some View {
@@ -296,7 +295,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             ForEach(page.layers.filter(\.visible)) { layer in
                 if canEdit && layer.id == activeLayer && !layer.locked {
                     InkSurface(
-                        ink: layer.ink, tool: tool, color: (tool == .marker ? markerColor : penColor).color,
+                        ink: layer.ink, tool: tool, color: activeInkColor,
                         width: tool == .marker ? markerWidth : penWidth,
                         darkPaper: darkPaper, pencilOnly: pencilOnly,
                         changed: { data, gesture in
