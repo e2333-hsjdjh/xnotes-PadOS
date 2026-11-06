@@ -178,3 +178,5 @@
 "Remove PDF markup" = "移除 PDF 文字标注";
 "Export PDF with editable text markup" = "导出含可编辑文字标注的 PDF";
 "Crop image" = "裁剪图片";
+"From photo library" = "从照片图库";
+"From files" = "从文件";

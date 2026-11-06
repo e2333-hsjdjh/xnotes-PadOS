@@ -64,12 +64,22 @@ struct PageImageView: View {
     }
 
     static func prepare(_ data: Data, for paper: CGSize) throws -> PageImage {
+        try prepare(CGImageSourceCreateWithData(data as CFData, nil), for: paper)
+    }
+
+    static func prepare(_ url: URL, for paper: CGSize) throws -> PageImage {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        return try prepare(CGImageSourceCreateWithURL(url as CFURL, nil), for: paper)
+    }
+
+    private static func prepare(_ source: CGImageSource?, for paper: CGSize) throws -> PageImage {
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceThumbnailMaxPixelSize: 2048
         ]
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+        guard let source,
               let pixels = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary),
               let encoded = UIImage(cgImage: pixels).pngData() else {
             throw CocoaError(.fileReadCorruptFile)

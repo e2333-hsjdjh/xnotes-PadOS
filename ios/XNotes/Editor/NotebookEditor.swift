@@ -51,7 +51,21 @@ struct NotebookEditor<SplitChoices: View>: View {
     @State private var text = ""
     @State private var layerToRename: UUID?
     @State private var layerName = ""
-    @State private var selectingOriginalPDF = false
+    private enum FileImport {
+        case originalPDF
+        case image(pageID: UUID, size: CGSize)
+
+        var contentTypes: [UTType] {
+            switch self {
+            case .originalPDF: [.pdf, .xnotesArchive]
+            case .image: [.image]
+            }
+        }
+    }
+
+    @State private var fileImport: FileImport = .originalPDF
+    @State private var showingFileImporter = false
+    @State private var showingPhotoPicker = false
     @State private var pdf: PDFDocument?
     @State private var pdfImage: UIImage?
     @State private var history = DocumentHistory()
@@ -84,7 +98,7 @@ struct NotebookEditor<SplitChoices: View>: View {
                     Text("Original PDF unavailable").font(.subheadline)
                     Spacer()
                     Menu("Recover PDF", systemImage: "link") {
-                        Button("Relink original PDF", systemImage: "link") { selectingOriginalPDF = true }
+                        Button("Relink original PDF", systemImage: "link") { showFileImporter(for: .originalPDF) }
                         Button("Save annotation-only copy", systemImage: "doc.on.doc") {
                             do {
                                 let id = try library.createAnnotationCopy(of: notebook.id)
@@ -130,14 +144,9 @@ struct NotebookEditor<SplitChoices: View>: View {
         .onChange(of: library.pdfRestorationRevision) {
             if notebook.kind == .pdf && pdf == nil { reloadPDF() }
         }
-        .fileImporter(isPresented: $selectingOriginalPDF, allowedContentTypes: [.pdf, .xnotesArchive]) { result in
-            do {
-                try library.restoreOriginalPDF(for: notebook.id, from: result.get())
-                reloadPDF()
-            } catch {
-                library.issue = error.localizedDescription
-            }
-        }
+        .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: fileImport.contentTypes,
+                      onCompletion: importFile)
+        .photosPicker(isPresented: $showingPhotoPicker, selection: $imageSelection, matching: .images)
         .onDisappear { imageImport?.cancel() }
         .onChange(of: readOnly) {
             saveViewState()
@@ -295,11 +304,13 @@ struct NotebookEditor<SplitChoices: View>: View {
                     text = page.text
                     editingText = true
                 }
-                PhotosPicker(selection: $imageSelection, matching: .images) {
-                    Image(systemName: "photo.badge.plus")
-                        .frame(minWidth: 48, minHeight: 48)
-                        .accessibilityLabel(Text("Insert image"))
+                Menu("Insert image", systemImage: "photo.badge.plus") {
+                    Button("From photo library", systemImage: "photo.on.rectangle") { showingPhotoPicker = true }
+                    Button("From files", systemImage: "folder") {
+                        showFileImporter(for: .image(pageID: page.id, size: paperSize))
+                    }
                 }
+                .frame(minWidth: 48, minHeight: 48)
                 icon("Arrange images", "move.3d", selected: editingImages) { editingImages.toggle() }
                     .disabled(!editingImages && page.images?.isEmpty != false)
                 if notebook.kind == .notebook {
@@ -594,6 +605,34 @@ struct NotebookEditor<SplitChoices: View>: View {
         .accessibilityLabel(Text(label))
     }
 
+    private func showFileImporter(for request: FileImport) {
+        fileImport = request
+        showingFileImporter = true
+    }
+
+    private func importFile(_ result: Result<URL, Error>) {
+        do {
+            let url = try result.get()
+            switch fileImport {
+            case .originalPDF:
+                try library.restoreOriginalPDF(for: notebook.id, from: url)
+                reloadPDF()
+            case .image(let targetID, let size):
+                guard canEdit else { return }
+                let image = try PageImageView.prepare(url, for: size)
+                insertImage(image, on: targetID)
+            }
+        } catch {
+            library.issue = error.localizedDescription
+        }
+    }
+
+    private func insertImage(_ image: PageImage, on targetID: UUID) {
+        if updatePage(on: targetID, { $0.images = ($0.images ?? []) + [image] }), targetID == page.id {
+            editingImages = true
+        }
+    }
+
     private func importImage(_ item: PhotosPickerItem) {
         imageImport?.cancel()
         let targetID = page.id
@@ -606,10 +645,7 @@ struct NotebookEditor<SplitChoices: View>: View {
                 }
                 let image = try PageImageView.prepare(original, for: size)
                 try Task.checkCancellation()
-                updatePage(on: targetID) { page in
-                    page.images = (page.images ?? []) + [image]
-                }
-                if targetID == page.id { editingImages = true }
+                insertImage(image, on: targetID)
             } catch is CancellationError {
                 return
             } catch {
