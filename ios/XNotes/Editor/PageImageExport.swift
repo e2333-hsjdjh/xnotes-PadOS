@@ -6,9 +6,9 @@ enum PageImageExport {
         let pages = notebook.pages.enumerated().filter { ids.contains($0.element.id) }
         guard !pages.isEmpty, pages.count == ids.count else { throw CocoaError(.fileReadNoSuchFile) }
         let title = notebook.title.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: ":", with: "_")
+        let sources = PDFPageSources(original: notebook.kind == .pdf ? source : nil, inserted: pagePDFs)
         return try pages.map { index, page in
-            let original = page.pdfBackground.flatMap { pagePDFs[$0.digest]?.page(at: $0.index) }
-                ?? (notebook.kind == .pdf ? source?.page(at: index) : nil)
+            let original = sources.page(for: page, at: index)
             if (notebook.kind == .pdf || page.pdfBackground != nil) && original == nil { throw CocoaError(.fileReadCorruptFile) }
             let image = try NotebookPageDrawing.render(page, original: original, longestEdge: 2048)
             guard let bytes = image.pngData() else { throw CocoaError(.fileWriteUnknown) }

@@ -91,6 +91,8 @@ struct NotebookEditor<SplitChoices: View>: View {
         page.layers.first { $0.id == selectedLayer }?.id ?? page.layers[page.layers.count - 1].id
     }
     private var viewStateSlot: DocumentViewStateStore.Slot { readOnly ? .secondary : .primary }
+    private var pdfSources: PDFPageSources { PDFPageSources(original: pdf, inserted: pagePDFs) }
+    private var currentPDFPage: PDFPage? { pdfSources.page(for: page, at: pageIndex) }
     private var canEdit: Bool { !readOnly && (notebook.kind != .pdf || pdf != nil) }
     private var darkPaper: Bool { scheme == .dark && notebook.kind != .pdf && page.pdfBackground == nil }
     private var paperSize: CGSize {
@@ -344,7 +346,7 @@ struct NotebookEditor<SplitChoices: View>: View {
                     icon("Paper size", "arrow.up.left.and.arrow.down.right") { showPaperSize = true }
                         .disabled(page.pdfBackground != nil)
                 }
-                if notebook.kind == .pdf {
+                if currentPDFPage != nil {
                     Menu("PDF text markup", systemImage: "character.textbox") {
                         ForEach(PDFTextMarkup.Kind.allCases, id: \.self) { kind in
                             Button(kind.label) { addPDFMarkup(kind) }
@@ -399,7 +401,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             if let pdfImage {
                 Image(uiImage: pdfImage).resizable().allowsHitTesting(false)
                 if let marks = page.pdfTextMarkups, !marks.isEmpty {
-                    let rotation = pdf?.page(at: pageIndex)?.rotation ?? 0
+                    let rotation = currentPDFPage?.rotation ?? 0
                     Canvas { context, size in
                         context.withCGContext {
                             PDFTextMarkupDrawing.draw(marks, in: $0, size: size, rotation: rotation)
@@ -713,7 +715,7 @@ struct NotebookEditor<SplitChoices: View>: View {
         clearPDFMatches()
         selectedPageID = pageID
         guard let index = notebook.pages.firstIndex(where: { $0.id == pageID }),
-              let original = pdf?.page(at: index),
+              let original = pdfSources.page(for: notebook.pages[index], at: index),
               let size = try? PDFPageGeometry.displaySize(original) else { return }
         pdfMatchPage = pageID
         pdfMatchQuery = query
@@ -722,7 +724,7 @@ struct NotebookEditor<SplitChoices: View>: View {
 
     private func addPDFMarkup(_ kind: PDFTextMarkup.Kind) {
         guard canEdit, pdfMatchPage == page.id,
-              let original = pdf?.page(at: pageIndex),
+              let original = currentPDFPage,
               let size = try? PDFPageGeometry.displaySize(original) else { return }
         let mark = PDFTextMarkup(kind: kind, query: pdfMatchQuery, rectangles: pdfMatchRects, paper: size)
         guard mark.isValid else { return }
@@ -766,9 +768,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     }
 
     private func loadBackground() {
-        let original = page.pdfBackground.flatMap { pagePDFs[$0.digest]?.page(at: $0.index) }
-            ?? pdf?.page(at: pageIndex)
-        guard let page = original else {
+        guard let page = currentPDFPage else {
             pdfImage = nil
             return
         }

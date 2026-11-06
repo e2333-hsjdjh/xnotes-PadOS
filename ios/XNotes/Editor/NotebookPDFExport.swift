@@ -53,14 +53,14 @@ enum NotebookPDFExport {
         guard !selected.isEmpty, ids == nil || selected.count == ids?.count else {
             throw CocoaError(.fileReadNoSuchFile)
         }
+        let sources = PDFPageSources(original: notebook.kind == .pdf ? input.source : nil, inserted: input.pagePDFs)
         return try selected.map { index, page in
             if notebook.kind == .canvas {
                 return Page(note: page, original: nil,
                             bounds: CGRect(origin: .zero, size: NotebookPageDrawing.canvasSize),
                             crop: try NotebookPageDrawing.canvasCrop(page), dark: input.darkCanvas)
             }
-            let original = page.pdfBackground.flatMap { input.pagePDFs[$0.digest]?.page(at: $0.index) }
-                ?? (notebook.kind == .pdf ? input.source?.page(at: index) : nil)
+            let original = sources.page(for: page, at: index)
             if (notebook.kind == .pdf || page.pdfBackground != nil) && original == nil { throw CocoaError(.fileReadCorruptFile) }
             let size = try original.map(PDFPageGeometry.displaySize) ?? (page.paperSize ?? .letter).dimensions
             return Page(note: page, original: original, bounds: CGRect(origin: .zero, size: size))

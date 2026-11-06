@@ -46,6 +46,8 @@ struct PageNavigator: View {
     @State private var searching = false
     @State private var outline: [PDFOutlineEntry] = []
 
+    private var sources: PDFPageSources { PDFPageSources(original: pdf, inserted: pagePDFs) }
+
     private var term: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var currentPDFMatches: [UUID: String] { searchedQuery == term ? pdfMatches : [:] }
 
@@ -60,7 +62,7 @@ struct PageNavigator: View {
                     let matches = pages.enumerated().filter { _, page in
                         page.text.localizedStandardContains(term) || snippets[page.id] != nil
                     }
-                    if pdf != nil && (searching || searchedQuery != term) {
+                    if sources.hasTextSource && (searching || searchedQuery != term) {
                         ProgressView("Searching PDF")
                     } else if matches.isEmpty {
                         ContentUnavailableView.search(text: term)
@@ -233,7 +235,8 @@ struct PageNavigator: View {
 
     @MainActor
     private func searchPDF(for term: String) async {
-        guard let pdf, !term.isEmpty else {
+        let sources = sources
+        guard sources.hasTextSource, !term.isEmpty else {
             pdfMatches = [:]
             searchedQuery = ""
             searching = false
@@ -247,7 +250,7 @@ struct PageNavigator: View {
             var matches: [UUID: String] = [:]
             for (index, page) in pages.enumerated() {
                 try Task.checkCancellation()
-                if let text = pdf.page(at: index)?.string,
+                if let text = sources.page(for: page, at: index)?.string,
                    let snippet = PDFPageSearch.snippet(in: text, matching: term) {
                     matches[page.id] = snippet
                 }
@@ -279,7 +282,7 @@ struct PageNavigator: View {
         } label: {
             HStack(spacing: 12) {
                 PageThumbnail(page: page, index: page.pdfBackground?.index ?? index,
-                              pdf: page.pdfBackground.flatMap { pagePDFs[$0.digest] } ?? pdf)
+                              pdf: sources.document(for: page))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading) {
                     Text("Page \(index + 1)")
