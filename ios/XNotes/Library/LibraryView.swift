@@ -64,7 +64,7 @@ struct LibraryView: View {
     }
 
     private var availablePanes: [DocumentPane] {
-        panes.filter { openNotebook($0.documentID) != nil }
+        DocumentPane.available(panes) { openNotebook($0) != nil }
     }
 
     var body: some View {
@@ -73,9 +73,13 @@ struct LibraryView: View {
             if !activePanes.isEmpty {
                 HStack(spacing: 0) {
                     ForEach(activePanes) { pane in
-                        if let notebook = openNotebook(pane.documentID) {
-                            if pane.id != activePanes.first?.id { Divider() }
+                        if pane.id != activePanes.first?.id { Divider() }
+                        if let id = pane.documentID, let notebook = openNotebook(id) {
                             editor(notebook, in: pane)
+                        } else {
+                            PaneLibraryView(documents: paneDocuments(for: pane),
+                                            open: { replace(pane, with: $0) },
+                                            close: { removePane(pane) })
                         }
                     }
                 }
@@ -391,14 +395,28 @@ struct LibraryView: View {
         }
     }
 
+    private func paneDocuments(for pane: DocumentPane) -> [Notebook] {
+        let neighbor = panes.first(where: { $0.id != pane.id })?.documentID
+        return library.notebooks.filter { $0.trashedAt == nil && ($0.kind != .canvas || $0.id != neighbor) }
+            .sorted { sort.precedes($0, $1, descending: descending) }
+    }
+
+    private func replace(_ pane: DocumentPane, with document: UUID?) {
+        guard let index = panes.firstIndex(where: { $0.id == pane.id }) else { return }
+        if let document, openNotebook(document) == nil { return }
+        panes[index].documentID = document
+    }
+
+    private func removePane(_ pane: DocumentPane) {
+        panes.removeAll { $0.id == pane.id }
+    }
+
     private func editor(_ notebook: Notebook, in pane: DocumentPane) -> some View {
         let shared = panes.first(where: { $0.documentID == notebook.id })?.id != pane.id
         return NotebookEditor(notebook: notebook, library: library, readOnly: shared, close: {
-            panes.removeAll { $0.id == pane.id }
+            panes = DocumentPane.closingDocument(in: pane.id, panes: panes)
         }, openRecoveredCopy: { documentID in
-            if let index = panes.firstIndex(where: { $0.id == pane.id }) {
-                panes[index].documentID = documentID
-            }
+            replace(pane, with: documentID)
         }) {
             if notebook.kind != .canvas {
                 Button("Open another view", systemImage: "rectangle.on.rectangle") {
@@ -417,8 +435,10 @@ struct LibraryView: View {
     }
 
     private func rememberSplit(_ active: [DocumentPane]) {
-        guard active.count == 2 else { return }
-        let workspace = SplitWorkspace(leading: active[0].documentID, trailing: active[1].documentID)
+        guard active.count == 2, let leading = active[0].documentID,
+              let trailing = active[1].documentID else { return }
+        let workspace = SplitWorkspace(leading: leading, trailing: trailing)
+        guard workspace.canRestore(from: library.notebooks) else { return }
         if let encoded = try? JSONEncoder().encode(workspace) { lastSplitWorkspace = encoded }
     }
 
@@ -535,11 +555,6 @@ struct LibraryView: View {
     private func perform(_ operation: () throws -> Void) {
         do { try operation() } catch { library.issue = error.localizedDescription }
     }
-}
-
-private struct DocumentPane: Identifiable, Equatable {
-    let id = UUID()
-    var documentID: UUID
 }
 
 private struct FolderRequest: Identifiable {
