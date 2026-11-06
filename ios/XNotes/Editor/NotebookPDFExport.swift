@@ -2,13 +2,17 @@ import PDFKit
 import UIKit
 
 enum NotebookPDFExport {
-    static func data(for notebook: Notebook, source: PDFDocument?) throws -> Data {
+    static func data(for notebook: Notebook, source: PDFDocument?, selecting ids: Set<UUID>? = nil) throws -> Data {
         guard notebook.kind != .canvas,
               notebook.kind != .pdf || source?.pageCount == notebook.pages.count else {
             throw CocoaError(.fileReadCorruptFile)
         }
 
-        let pages = try notebook.pages.enumerated().map { index, page in
+        let selected = notebook.pages.enumerated().filter { ids?.contains($0.element.id) ?? true }
+        guard !selected.isEmpty, ids == nil || selected.count == ids?.count else {
+            throw CocoaError(.fileReadNoSuchFile)
+        }
+        let pages = try selected.map { index, page in
             let original = source?.page(at: index)
             let size = try original.map(NotebookPageDrawing.displaySize) ?? (page.paperSize ?? .letter).dimensions
             return (page, original, CGRect(origin: .zero, size: size))

@@ -6,6 +6,8 @@ struct PageNavigator: View {
     let current: UUID
     let editable: Bool
     let pdf: PDFDocument?
+    let documentTitle: String
+    let exportPages: (Set<UUID>) throws -> Data
     let open: (UUID) -> Void
     let add: () -> Void
     let duplicate: (Set<UUID>) -> Bool
@@ -17,6 +19,9 @@ struct PageNavigator: View {
     @State private var query = ""
     @State private var deleting: Set<UUID> = []
     @State private var selecting = false
+    @State private var export: ExportFile?
+    @State private var showingExporter = false
+    @State private var exportIssue: String?
     @State private var paperRequest: PaperRequest?
 
     private struct PaperRequest: Identifiable {
@@ -84,22 +89,20 @@ struct PageNavigator: View {
                         }
                     }
                 }
-                if editable {
-                    ToolbarItemGroup(placement: .primaryAction) {
-                        if selecting {
-                            Button("Select all pages") { selected = Set(pages.map(\.id)) }
-                                .disabled(selected.count == pages.count)
-                        } else {
-                            Button("Select pages") {
-                                editMode = .inactive
-                                selecting = true
+                ToolbarItemGroup(placement: .primaryAction) {
+                    if selecting {
+                        Button("Select all pages") { selected = Set(pages.map(\.id)) }
+                            .disabled(selected.count == pages.count)
+                    } else {
+                        Button("Select pages") {
+                            editMode = .inactive
+                            selecting = true
+                        }
+                        if editable && term.isEmpty {
+                            Button(editMode.isEditing ? "Done reordering" : "Reorder pages") {
+                                editMode = editMode.isEditing ? .inactive : .active
                             }
-                            if term.isEmpty {
-                                Button(editMode.isEditing ? "Done reordering" : "Reorder pages") {
-                                    editMode = editMode.isEditing ? .inactive : .active
-                                }
-                                Button("Add page", systemImage: "plus", action: add)
-                            }
+                            Button("Add page", systemImage: "plus", action: add)
                         }
                     }
                 }
@@ -107,21 +110,40 @@ struct PageNavigator: View {
                     ToolbarItemGroup(placement: .bottomBar) {
                         Text("\(selected.count) selected")
                         Spacer()
-                        Menu("Edit selected paper", systemImage: "doc") {
-                            Button("Paper size") { requestPaper(.size) }
-                            Button("Paper template") { requestPaper(.pattern) }
+                        Button("Export selected pages as PDF", systemImage: "square.and.arrow.up") {
+                            prepareExport()
                         }
                         .disabled(selected.isEmpty)
-                        Button("Duplicate pages", systemImage: "plus.square.on.square") {
-                            if duplicate(selected) { endSelection() }
+                        if editable {
+                            Menu("Edit selected paper", systemImage: "doc") {
+                                Button("Paper size") { requestPaper(.size) }
+                                Button("Paper template") { requestPaper(.pattern) }
+                            }
+                            .disabled(selected.isEmpty)
+                            Button("Duplicate pages", systemImage: "plus.square.on.square") {
+                                if duplicate(selected) { endSelection() }
+                            }
+                            .disabled(selected.isEmpty)
+                            Button("Delete pages", systemImage: "trash", role: .destructive) {
+                                deleting = selected
+                            }
+                            .disabled(selected.isEmpty || selected.count >= pages.count)
                         }
-                        .disabled(selected.isEmpty)
-                        Button("Delete pages", systemImage: "trash", role: .destructive) {
-                            deleting = selected
-                        }
-                        .disabled(selected.isEmpty || selected.count >= pages.count)
                     }
                 }
+            }
+            .fileExporter(isPresented: $showingExporter, document: export, contentType: .pdf,
+                          defaultFilename: documentTitle) { result in
+                export = nil
+                if case .failure(let error) = result { exportIssue = error.localizedDescription }
+            }
+            .alert("PDF export failed", isPresented: Binding(
+                get: { exportIssue != nil },
+                set: { if !$0 { exportIssue = nil } }
+            )) {
+                Button("OK", role: .cancel) { exportIssue = nil }
+            } message: {
+                Text(exportIssue ?? "")
             }
             .sheet(item: $paperRequest) { request in
                 switch request.kind {
@@ -152,6 +174,15 @@ struct PageNavigator: View {
                     editMode = .inactive
                 }
             }
+        }
+    }
+
+    private func prepareExport() {
+        do {
+            export = ExportFile(data: try exportPages(selected))
+            showingExporter = true
+        } catch {
+            exportIssue = error.localizedDescription
         }
     }
 

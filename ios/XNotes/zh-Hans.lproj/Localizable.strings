@@ -120,3 +120,5 @@
 "Reorder pages" = "调整页面顺序";
 "Done reordering" = "完成排序";
 "Edit selected paper" = "调整所选页面纸张";
+"Export selected pages as PDF" = "将所选页面导出为 PDF";
+"PDF export failed" = "PDF 导出失败";

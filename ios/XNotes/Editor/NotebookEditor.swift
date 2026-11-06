@@ -106,6 +106,11 @@ struct NotebookEditor<SplitChoices: View>: View {
                 current: page.id,
                 editable: !readOnly && notebook.kind == .notebook,
                 pdf: pdf,
+                documentTitle: notebook.title,
+                exportPages: { ids in
+                    guard let latestNotebook else { throw CocoaError(.fileReadNoSuchFile) }
+                    return try NotebookPDFExport.data(for: latestNotebook, source: pdf, selecting: ids)
+                },
                 open: { selectedPageID = $0 },
                 add: addPage,
                 duplicate: duplicatePages,
