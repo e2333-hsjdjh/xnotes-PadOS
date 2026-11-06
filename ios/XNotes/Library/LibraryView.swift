@@ -370,6 +370,16 @@ struct LibraryView: View {
             }
             Button("Export backup", systemImage: "square.and.arrow.up") { exportNotebook(notebook) }
             Button("Export PDF", systemImage: "doc.richtext") { exportPDF(notebook) }
+            if notebook.kind == .pdf && notebook.pages.contains(where: { $0.pdfTextMarkups?.isEmpty == false }) {
+                Button("Export PDF with editable text markup", systemImage: "highlighter") {
+                    perform {
+                        export = ExportFile(data: try PDFMarkupExport.data(for: notebook, source: library.pdf(for: notebook)))
+                        exportType = .pdf
+                        exportTitle = notebook.title
+                        exporting = true
+                    }
+                }
+            }
             Button(trashRetention == .off ? "Delete permanently" : "Move to Trash",
                    systemImage: "trash", role: .destructive) { removeFromLibrary([notebook.id]) }
         }
