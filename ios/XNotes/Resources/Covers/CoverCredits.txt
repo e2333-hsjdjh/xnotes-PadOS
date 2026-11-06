@@ -6,3 +6,15 @@ The Metropolitan Museum of Art, public domain.
 cover-earthrise.webp — Bill Anders, Apollo 8, NASA, public domain.
 
 The corresponding Android templates are MIT licensed. See the repository LICENSE.
+
+cover-almond-blossom.webp — Vincent van Gogh, Almond Blossom, 1890,
+Van Gogh Museum, Amsterdam, public domain.
+cover-bubble-net.webp — Christin Khan, NOAA, 2013, public domain.
+cover-cosmic-cliffs.webp — NASA, ESA, CSA and STScI, 2022, public domain.
+cover-floe.webp — George Hale, NASA Operation IceBridge, 2012, public domain.
+cover-pine-forest.webp — Ivan Shishkin and Konstantin Savitsky,
+Morning in a Pine Forest, 1889, Tretyakov Gallery, public domain.
+cover-saint-tropez.webp — Paul Signac, The Port of Saint-Tropez, 1901–1902,
+National Museum of Western Art, Tokyo, public domain.
+cover-strawberry-thief.webp — William Morris, Strawberry Thief,
+Cleveland Museum of Art, CC0.

@@ -6,10 +6,43 @@ extension NotebookCover {
         case .cloth: "Book Cloth"
         case .kanagawa: "Kanagawa"
         case .earthrise: "Earthrise"
+        case .almondBlossom: "Almond Blossom"
+        case .bubbleNet: "Bubble Net"
+        case .cosmicCliffs: "Cosmic Cliffs"
+        case .floe: "Floe"
+        case .pineForest: "Pine Forest"
+        case .saintTropez: "Saint-Tropez"
+        case .strawberryThief: "Strawberry Thief"
         }
     }
 
-    var usesLightInk: Bool { self != .kanagawa }
+    var usesLightInk: Bool {
+        switch self {
+        case .kanagawa, .almondBlossom, .floe, .saintTropez: false
+        default: true
+        }
+    }
+
+    private var colors: (paper: UInt32, label: UInt32, rule: UInt32) {
+        switch self {
+        case .cloth: (0x6E2A2C, 0xF1E8D4, 0x3B2A26)
+        case .kanagawa: (0xFAEAC6, 0xFDF8EC, 0x1F3D66)
+        case .earthrise: (0x000000, 0xEFEEEA, 0x2A2A2E)
+        case .almondBlossom: (0x6E8E84, 0xF6F2E3, 0x24484C)
+        case .bubbleNet: (0x47676B, 0xF1F5F4, 0x12303C)
+        case .cosmicCliffs: (0x604F5A, 0xF5F1E8, 0x1D2B4D)
+        case .floe: (0x4C7399, 0xF4F8FB, 0x123A66)
+        case .pineForest: (0x6D6951, 0xF3ECD9, 0x34412C)
+        case .saintTropez: (0xB6AEA8, 0xFDF6EE, 0x3F4D7D)
+        case .strawberryThief: (0x67665E, 0xF1E8D4, 0x22374D)
+        }
+    }
+
+    private static func color(_ rgb: UInt32) -> CGColor {
+        CGColor(red: CGFloat((rgb >> 16) & 255) / 255,
+                green: CGFloat((rgb >> 8) & 255) / 255,
+                blue: CGFloat(rgb & 255) / 255, alpha: 1)
+    }
 
     private static let artworks: [Self: UIImage] = Dictionary(uniqueKeysWithValues: allCases.compactMap { cover in
         guard let url = Bundle.main.url(forResource: "cover-\(cover.rawValue)", withExtension: "webp"),
@@ -23,11 +56,8 @@ extension NotebookCover {
         defer { context.restoreGState() }
         context.clip(to: bounds)
 
-        switch self {
-        case .cloth: context.setFillColor(red: 0.43, green: 0.16, blue: 0.17, alpha: 1)
-        case .kanagawa: context.setFillColor(red: 0.98, green: 0.92, blue: 0.78, alpha: 1)
-        case .earthrise: context.setFillColor(gray: 0, alpha: 1)
-        }
+        let colors = colors
+        context.setFillColor(Self.color(colors.paper))
         context.fill(bounds)
 
         if let image = Self.artworks[self] {
@@ -43,6 +73,12 @@ extension NotebookCover {
                 let width = max(size.width, size.height * 1.1)
                 let height = width / 1.4254
                 frame = CGRect(x: (size.width - width) / 2, y: size.height - height, width: width, height: height)
+            default:
+                let scale = max(size.width / image.size.width, size.height / image.size.height)
+                let width = image.size.width * scale
+                let height = image.size.height * scale
+                let offsetY = (size.height - height) * (self == .pineForest ? 1 : 0.5)
+                frame = CGRect(x: (size.width - width) / 2, y: offsetY, width: width, height: height)
             }
             UIGraphicsPushContext(context)
             image.draw(in: frame, blendMode: self == .cloth ? .multiply : .normal, alpha: 1)
@@ -55,17 +91,24 @@ extension NotebookCover {
             context.setLineWidth(max(0.5, edge * 0.003))
             context.stroke(bounds.insetBy(dx: edge * 0.05, dy: edge * 0.05))
         }
-        let centerY: CGFloat
+        let wide = max(0, size.width - size.height)
+        let center: CGPoint
         switch self {
-        case .cloth: centerY = size.height * 0.30
-        case .kanagawa: centerY = size.height * 0.20
-        case .earthrise: centerY = size.height * 0.90
+        case .cloth: center = CGPoint(x: size.width / 2, y: size.height * 0.30)
+        case .kanagawa: center = CGPoint(x: size.width / 2 + wide * 0.8, y: size.height * 0.20)
+        case .earthrise: center = CGPoint(x: size.width / 2, y: size.height * 0.90 - wide * 0.05)
+        case .almondBlossom: center = CGPoint(x: size.width / 2, y: size.height * 0.24)
+        case .bubbleNet: center = CGPoint(x: size.width / 2, y: size.height * 0.18)
+        case .cosmicCliffs, .pineForest: center = CGPoint(x: size.width / 2, y: size.height * 0.20 - wide * 0.15)
+        case .floe: center = CGPoint(x: size.width / 2 - wide * 0.8, y: size.height * 0.20)
+        case .saintTropez: center = CGPoint(x: size.width / 2, y: size.height * 0.18 - wide * 0.1)
+        case .strawberryThief: center = CGPoint(x: size.width / 2, y: size.height * 0.28)
         }
-        let plate = CGRect(x: (size.width - edge * 0.58) / 2, y: centerY - edge * 0.095,
+        let plate = CGRect(x: center.x - edge * 0.29, y: center.y - edge * 0.095,
                            width: edge * 0.58, height: edge * 0.19)
-        context.setFillColor(red: 0.97, green: 0.94, blue: 0.86, alpha: 1)
+        context.setFillColor(Self.color(colors.label))
         context.fill(plate)
-        context.setStrokeColor(gray: 0.25, alpha: 1)
+        context.setStrokeColor(Self.color(colors.rule))
         context.setLineWidth(max(0.5, edge * 0.0016))
         context.stroke(plate.insetBy(dx: edge * 0.008, dy: edge * 0.008))
     }
