@@ -55,6 +55,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     private var activeLayer: UUID {
         page.layers.first { $0.id == selectedLayer }?.id ?? page.layers[page.layers.count - 1].id
     }
+    private var viewStateSlot: DocumentViewStateStore.Slot { readOnly ? .secondary : .primary }
     private var canEdit: Bool { !readOnly && (notebook.kind != .pdf || pdf != nil) }
     private var darkPaper: Bool { scheme == .dark && notebook.kind != .pdf }
     private var paperSize: CGSize {
@@ -106,7 +107,7 @@ struct NotebookEditor<SplitChoices: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             if !restoredViewState {
-                if let state = library.viewStates.load(notebook.id) {
+                if let state = library.viewStates.load(notebook.id, slot: viewStateSlot) {
                     selectedPageID = state.page(in: notebook.pages)
                     zoom = state.zoom
                 }
@@ -128,7 +129,8 @@ struct NotebookEditor<SplitChoices: View>: View {
         }
         .onDisappear { imageImport?.cancel() }
         .onChange(of: readOnly) {
-            guard readOnly else { saveViewState(); return }
+            saveViewState()
+            guard readOnly else { return }
             history.clear()
             imageImport?.cancel()
             imageSelection = nil
@@ -544,10 +546,10 @@ struct NotebookEditor<SplitChoices: View>: View {
     }
 
     private func saveViewState() {
-        guard restoredViewState, !readOnly,
+        guard restoredViewState,
               library.notebooks.contains(where: { $0.id == notebook.id && $0.trashedAt == nil }) else { return }
         do {
-            try library.viewStates.save(DocumentViewState(pageID: page.id, zoom: zoom), for: notebook.id)
+            try library.viewStates.save(DocumentViewState(pageID: page.id, zoom: zoom), for: notebook.id, slot: viewStateSlot)
         } catch {
             if library.issue == nil { library.issue = error.localizedDescription }
         }

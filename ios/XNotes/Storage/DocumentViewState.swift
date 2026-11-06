@@ -43,21 +43,33 @@ struct DocumentViewState: Codable, Equatable {
 struct DocumentViewStateStore {
     let directory: URL
 
-    func load(_ id: UUID) -> DocumentViewState? {
-        guard let data = try? Data(contentsOf: file(for: id)) else { return nil }
+    enum Slot: String, CaseIterable {
+        case primary, secondary
+    }
+
+    func load(_ id: UUID, slot: Slot = .primary) -> DocumentViewState? {
+        if let state = read(file(for: id, slot: slot)) { return state }
+        return slot == .secondary ? read(file(for: id, slot: .primary)) : nil
+    }
+
+    private func read(_ file: URL) -> DocumentViewState? {
+        guard let data = try? Data(contentsOf: file) else { return nil }
         return try? JSONDecoder().decode(DocumentViewState.self, from: data)
     }
 
-    func save(_ state: DocumentViewState, for id: UUID) throws {
+    func save(_ state: DocumentViewState, for id: UUID, slot: Slot = .primary) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try JSONEncoder().encode(state).write(to: file(for: id), options: .atomic)
+        try JSONEncoder().encode(state).write(to: file(for: id, slot: slot), options: .atomic)
     }
 
     func remove(_ id: UUID) {
-        try? FileManager.default.removeItem(at: file(for: id))
+        for slot in Slot.allCases {
+            try? FileManager.default.removeItem(at: file(for: id, slot: slot))
+        }
     }
 
-    private func file(for id: UUID) -> URL {
-        directory.appending(path: id.uuidString).appendingPathExtension("json")
+    private func file(for id: UUID, slot: Slot) -> URL {
+        let name = slot == .primary ? id.uuidString : "\(id.uuidString)-\(slot.rawValue)"
+        return directory.appending(path: name).appendingPathExtension("json")
     }
 }
