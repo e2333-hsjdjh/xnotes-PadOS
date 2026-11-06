@@ -16,6 +16,7 @@ struct PageNavigator: View {
     let open: (UUID) -> Void
     let openPDFMatch: (UUID, String) -> Void
     let add: () -> Void
+    let editCover: () -> Void
     let copyPages: (Set<UUID>) -> Bool
     let cutPages: (Set<UUID>) -> Bool
     let pasteCount: Int
@@ -59,7 +60,9 @@ struct PageNavigator: View {
         NavigationStack {
             List {
                 if term.isEmpty {
-                    ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in row(page, index: index) }
+                    ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in
+                        row(page, index: index).moveDisabled(page.isCover == true)
+                    }
                         .onMove(perform: editable && !selecting ? move : nil)
                 } else {
                     let snippets = currentPDFMatches
@@ -130,6 +133,7 @@ struct PageNavigator: View {
                             }
                             Menu("Add page", systemImage: "plus") {
                                 Button("Add page", action: add)
+                                Button(pages.first?.isCover == true ? "Change cover" : "Add cover", action: editCover)
                                 if pasteCount > 0 {
                                     Button("Paste \(pasteCount) pages", action: pastePages)
                                 }
@@ -154,7 +158,7 @@ struct PageNavigator: View {
                                 Button("Cut selected pages", systemImage: "scissors") {
                                     if cutPages(selected) { endSelection() }
                                 }
-                                .disabled(selected.count >= pages.count)
+                                .disabled(!canRemove(selected))
                             }
                         }
                         .disabled(selected.isEmpty)
@@ -171,7 +175,7 @@ struct PageNavigator: View {
                             Button("Delete pages", systemImage: "trash", role: .destructive) {
                                 deleting = selected
                             }
-                            .disabled(selected.isEmpty || selected.count >= pages.count)
+                            .disabled(selected.isEmpty || !canRemove(selected))
                         }
                     }
                 }
@@ -218,6 +222,10 @@ struct PageNavigator: View {
                 }
             }
         }
+    }
+
+    private func canRemove(_ ids: Set<UUID>) -> Bool {
+        pages.contains { $0.isCover != true && !ids.contains($0.id) }
     }
 
     private func prepareExport(asImages: Bool) {
@@ -306,7 +314,11 @@ struct PageNavigator: View {
                               pdf: sources.document(for: page))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading) {
-                    Text("Page \(index + 1)")
+                    if page.isCover == true {
+                        Text("Cover page")
+                    } else {
+                        Text("Page \(index + 1)")
+                    }
                     if let pdfSnippet {
                         Text(pdfSnippet).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     }
@@ -335,10 +347,10 @@ struct PageNavigator: View {
             }
             if editable && !selecting {
                 Button("Cut page", systemImage: "scissors") { _ = cutPages([page.id]) }
-                    .disabled(pages.count == 1)
+                    .disabled(!canRemove([page.id]))
                 Button("Duplicate page", systemImage: "plus.square.on.square") { _ = duplicate([page.id]) }
-                Button("Delete page", systemImage: "trash", role: .destructive) { deleting = [page.id] }
-                    .disabled(pages.count == 1)
+                Button(page.isCover == true ? "Remove cover" : "Delete page", systemImage: "trash", role: .destructive) { deleting = [page.id] }
+                    .disabled(!canRemove([page.id]))
             }
         }
     }

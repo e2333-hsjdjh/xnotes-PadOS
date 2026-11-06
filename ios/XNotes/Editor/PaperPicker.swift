@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PaperPicker: View {
     let selection: PaperPattern?
+    var title: LocalizedStringKey = "Paper template"
     let select: (PaperPattern) -> Bool
 
     @Environment(\.dismiss) private var dismiss
@@ -27,7 +28,7 @@ struct PaperPicker: View {
                 }
                 .accessibilityAddTraits(selection == pattern ? .isSelected : [])
             }
-            .navigationTitle("Paper template")
+            .navigationTitle(title)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

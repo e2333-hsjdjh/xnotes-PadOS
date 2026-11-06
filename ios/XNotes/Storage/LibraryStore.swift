@@ -443,6 +443,9 @@ final class LibraryStore {
                       notebook.kind == .notebook && $0.index >= 0 && PDFResourceCollector.isDigest($0.digest)
                   } ?? true)
               }) else { return false }
+        let covers = notebook.pages.indices.filter { notebook.pages[$0].isCover == true }
+        guard covers.isEmpty || (notebook.kind == .notebook && covers == [0] &&
+                                 notebook.pages.count > 1 && notebook.pages[0].pdfBackground == nil) else { return false }
         if notebook.kind == .pdf {
             guard let digest = notebook.pdfDigest else { return false }
             return PDFResourceCollector.isDigest(digest)

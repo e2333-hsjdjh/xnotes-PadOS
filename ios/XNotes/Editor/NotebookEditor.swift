@@ -22,6 +22,8 @@ struct NotebookEditor<SplitChoices: View>: View {
     @State private var zoom = PaperZoom()
     @State private var restoredViewState = false
     @State private var showPaper = false
+    @State private var showCoverPicker = false
+    @State private var pendingCoverPicker = false
     @State private var showPaperSize = false
     @State private var selectedLayer: UUID?
     @State private var tool: InkTool = .pen
@@ -193,6 +195,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             editingImages = false
             editingText = false
             showPaper = false
+            showCoverPicker = false
             showPaperSize = false
             layerToRename = nil
             inkSettingsTool = nil
@@ -208,7 +211,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             if pdfMatchPage != page.id { clearPDFMatches() }
             saveViewState()
         }
-        .sheet(isPresented: $showPages, onDismiss: scrollToPDFMatch) {
+        .sheet(isPresented: $showPages, onDismiss: pageNavigatorDismissed) {
             pageNavigator
         }
         .sheet(item: $pdfInsertRequest) { request in
@@ -235,6 +238,12 @@ struct NotebookEditor<SplitChoices: View>: View {
                 InkSettingsView(tool: tool, preset: $markerColor, custom: $markerCustomColor, width: $markerWidth)
             } else {
                 InkSettingsView(tool: tool, preset: $penColor, custom: $penCustomColor, width: $penWidth)
+            }
+        }
+        .sheet(isPresented: $showCoverPicker) {
+            let cover = notebook.pages.first.flatMap { $0.isCover == true ? $0 : nil }
+            PaperPicker(selection: cover.map { $0.paperPattern ?? .blank }, title: "Cover page") { pattern in
+                setCover(pattern)
             }
         }
         .sheet(isPresented: $showPaper) {
@@ -302,6 +311,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             },
             openPDFMatch: showPDFMatches,
             add: addPage,
+            editCover: { showCoverPickerFromNavigator() },
             copyPages: copyPages,
             cutPages: cutPages,
             pasteCount: canEdit ? (library.pageClipboard?.pages.count ?? 0) : 0,
@@ -515,6 +525,30 @@ struct NotebookEditor<SplitChoices: View>: View {
         }
     }
 
+    private func pageNavigatorDismissed() {
+        if pendingCoverPicker {
+            pendingCoverPicker = false
+            showCoverPicker = true
+        } else {
+            scrollToPDFMatch()
+        }
+    }
+
+    private func showCoverPickerFromNavigator() {
+        pendingCoverPicker = true
+        showPages = false
+    }
+
+    private func setCover(_ pattern: PaperPattern) -> Bool {
+        guard !readOnly, notebook.kind == .notebook, var updated = latestNotebook else { return false }
+        let pages = PageBatch.cover(pattern, in: updated.pages)
+        if pages == updated.pages { return true }
+        updated.pages = pages
+        guard save(updated) else { return false }
+        selectedPageID = pages.first?.id
+        return true
+    }
+
     private func addPage() {
         guard var updated = latestNotebook,
               let index = updated.pages.firstIndex(where: { $0.id == page.id }) else { return }
@@ -595,7 +629,9 @@ struct NotebookEditor<SplitChoices: View>: View {
         guard var updated = latestNotebook,
               updated.pages.map(\.id) == notebook.pages.map(\.id) else { return }
         let current = page.id
-        updated.pages.move(fromOffsets: indices, toOffset: destination)
+        let hasCover = updated.pages.first?.isCover == true
+        guard !hasCover || !indices.contains(0) else { return }
+        updated.pages.move(fromOffsets: indices, toOffset: hasCover ? max(1, destination) : destination)
         if save(updated) { selectedPageID = current }
     }
 

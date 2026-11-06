@@ -24,6 +24,16 @@ enum PageBatch {
         }
     }
 
+    static func cover(_ pattern: PaperPattern, in pages: [NotePage]) -> [NotePage] {
+        guard let first = pages.first else { return pages }
+        var result = pages
+        if first.isCover != true {
+            result.insert(NotePage(isCover: true, paperSize: first.paperSize), at: 0)
+        }
+        PagePaperEdit.pattern(pattern).apply(to: &result[0])
+        return result
+    }
+
     static func duplicate(_ ids: Set<UUID>, in pages: [NotePage]) -> (pages: [NotePage], firstCopy: UUID)? {
         var firstCopy: UUID?
         var result: [NotePage] = []
@@ -42,6 +52,7 @@ enum PageBatch {
         var copy = page
         copy.id = UUID()
         copy.bookmarks = nil
+        copy.isCover = nil
         if let images = copy.images {
             copy.images = images.map {
                 var image = $0
@@ -62,7 +73,7 @@ enum PageBatch {
 
     static func remove(_ ids: Set<UUID>, from pages: [NotePage], current: UUID) -> (pages: [NotePage], current: UUID)? {
         let remaining = pages.filter { !ids.contains($0.id) }
-        guard !remaining.isEmpty, remaining.count < pages.count else { return nil }
+        guard remaining.contains(where: { $0.isCover != true }), remaining.count < pages.count else { return nil }
         guard let oldIndex = pages.firstIndex(where: { $0.id == current }) else {
             return (remaining, remaining[0].id)
         }
