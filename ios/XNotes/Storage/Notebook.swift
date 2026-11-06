@@ -64,6 +64,7 @@ struct NotePage: Codable, Identifiable, Equatable {
     var text = ""
     var images: [PageImage]?
     var bookmarks: [PageBookmark]?
+    var pdfTextMarkups: [PDFTextMarkup]?
     var paperPattern: PaperPattern?
     var paperSize: NotebookPaperSize?
     var layers = [DrawingLayer(name: String(localized: "Layer 1"))]

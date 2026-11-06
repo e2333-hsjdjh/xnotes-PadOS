@@ -13,6 +13,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     @ViewBuilder let splitChoices: () -> SplitChoices
 
     @Environment(\.colorScheme) private var scheme
+    @State private var pdfMatchQuery = ""
     @State private var pdfMatchPage: UUID?
     @State private var pdfMatchRects: [CGRect] = []
     @State private var pdfScrollTarget: PaperScrollTarget?
@@ -284,6 +285,26 @@ struct NotebookEditor<SplitChoices: View>: View {
                     icon("Paper template", "rectangle.grid.2x2") { showPaper = true }
                     icon("Paper size", "arrow.up.left.and.arrow.down.right") { showPaperSize = true }
                 }
+                if notebook.kind == .pdf {
+                    Menu("PDF text markup", systemImage: "character.textbox") {
+                        ForEach(PDFTextMarkup.Kind.allCases, id: \.self) { kind in
+                            Button(kind.label) { addPDFMarkup(kind) }
+                                .disabled(pdfMatchPage != page.id || pdfMatchRects.isEmpty)
+                        }
+                        if let marks = page.pdfTextMarkups, !marks.isEmpty {
+                            Menu("Remove PDF markup") {
+                                ForEach(marks) { mark in
+                                    Button(role: .destructive) {
+                                        updatePage { $0.pdfTextMarkups?.removeAll { $0.id == mark.id } }
+                                    } label: {
+                                        Text(mark.query)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .frame(minWidth: 48, minHeight: 48)
+                }
                 icon("Layers", "square.3.layers.3d", selected: showLayers) { showLayers.toggle() }
                 Menu("Ink settings", systemImage: "slider.horizontal.3") {
                     Button("Pen") { inkSettingsTool = .pen }
@@ -318,6 +339,16 @@ struct NotebookEditor<SplitChoices: View>: View {
             }
             if let pdfImage {
                 Image(uiImage: pdfImage).resizable().allowsHitTesting(false)
+                if let marks = page.pdfTextMarkups, !marks.isEmpty {
+                    let rotation = pdf?.page(at: pageIndex)?.rotation ?? 0
+                    Canvas { context, size in
+                        context.withCGContext {
+                            PDFTextMarkupDrawing.draw(marks, in: $0, size: size, rotation: rotation)
+                        }
+                    }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
             }
             if !editingImages || readOnly {
                 ForEach(page.images ?? []) { image in
@@ -571,7 +602,19 @@ struct NotebookEditor<SplitChoices: View>: View {
               let original = pdf?.page(at: index),
               let size = try? PDFPageGeometry.displaySize(original) else { return }
         pdfMatchPage = pageID
+        pdfMatchQuery = query
         pdfMatchRects = PDFPageSearch.matchRects(on: original, query: query, displaySize: size)
+    }
+
+    private func addPDFMarkup(_ kind: PDFTextMarkup.Kind) {
+        guard canEdit, pdfMatchPage == page.id,
+              let original = pdf?.page(at: pageIndex),
+              let size = try? PDFPageGeometry.displaySize(original) else { return }
+        let mark = PDFTextMarkup(kind: kind, query: pdfMatchQuery, rectangles: pdfMatchRects, paper: size)
+        guard mark.isValid else { return }
+        if updatePage({ $0.pdfTextMarkups = ($0.pdfTextMarkups ?? []) + [mark] }) {
+            clearPDFMatches()
+        }
     }
 
     private func scrollToPDFMatch() {
@@ -581,6 +624,7 @@ struct NotebookEditor<SplitChoices: View>: View {
 
     private func clearPDFMatches() {
         pdfMatchPage = nil
+        pdfMatchQuery = ""
         pdfMatchRects = []
         pdfScrollTarget = nil
     }

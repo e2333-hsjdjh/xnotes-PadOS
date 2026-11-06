@@ -247,6 +247,7 @@ final class LibraryStore {
         var copy = Notebook(title: title, kind: .notebook, folderID: original.folderID)
         copy.pages = original.pages.map { source in
             var page = source
+            page.pdfTextMarkups = nil
             let size = source.paperSize ?? .letter
             var width = size.width
             var height = size.height
@@ -320,7 +321,8 @@ final class LibraryStore {
               notebook.pages.allSatisfy({ page in
                   !page.layers.isEmpty && Set(page.layers.map(\.id)).count == page.layers.count &&
                   validImages(page.images ?? []) && (page.paperSize?.isValid ?? true) &&
-                  Set((page.bookmarks ?? []).map(\.id)).count == (page.bookmarks ?? []).count
+                  Set((page.bookmarks ?? []).map(\.id)).count == (page.bookmarks ?? []).count &&
+                  (page.pdfTextMarkups ?? []).allSatisfy(\.isValid)
               }) else { return false }
         if notebook.kind == .pdf {
             guard let digest = notebook.pdfDigest else { return false }

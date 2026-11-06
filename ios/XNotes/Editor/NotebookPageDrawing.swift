@@ -44,6 +44,8 @@ enum NotebookPageDrawing {
         graphics.fill(visible)
         if let original {
             try draw(original, in: bounds, with: graphics)
+            PDFTextMarkupDrawing.draw(page.pdfTextMarkups ?? [], in: graphics, size: bounds.size,
+                                      rotation: original.rotation)
         } else if let pattern = page.paperPattern {
             pattern.draw(in: graphics, size: bounds.size, dark: false)
         }

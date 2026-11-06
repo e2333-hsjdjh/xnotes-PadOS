@@ -171,3 +171,8 @@
 "Close pane" = "关闭窗格";
 "Choose document" = "选择文档";
 "Search documents" = "搜索文档";
+"PDF text markup" = "PDF 文字标注";
+"Highlight text" = "高亮文字";
+"Underline text" = "添加下划线";
+"Strike through text" = "添加删除线";
+"Remove PDF markup" = "移除 PDF 文字标注";
