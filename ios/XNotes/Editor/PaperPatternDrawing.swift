@@ -42,6 +42,10 @@ extension PaperPattern {
         case .musicalStaves, .guitarTab:
             MusicPaperDrawing.draw(in: context, size: size, gap: spacing, tablature: self == .guitarTab,
                                    gray: gray, opacity: values.opacity)
+        case .cornell:
+            StudyPaperDrawing.cornell(in: context, size: size, settings: values, gray: gray, preview: preview)
+        case .calligraphy:
+            StudyPaperDrawing.calligraphy(in: context, size: size, settings: values, gray: gray, preview: preview)
         case .engineering:
             Self.drawEngineering(in: context, size: size, spacing: spacing, group: values.squaresPerBlock ?? 5,
                                  gray: gray, opacity: values.opacity, preview: preview)

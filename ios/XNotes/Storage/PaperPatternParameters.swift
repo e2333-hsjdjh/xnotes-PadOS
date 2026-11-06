@@ -6,6 +6,10 @@ struct PaperPatternParameters: Codable, Equatable {
     var marginMM: Double = 79 / NotebookPaperSize.pointsPerMillimeter
     var opacity: Double = 1
     var squaresPerBlock: Int?
+    var cueFraction: Double?
+    var summaryMM: Double?
+    var xHeight: Double?
+    var slant: Double?
 
     static func defaults(for pattern: PaperPattern) -> Self {
         let points: Double
@@ -16,22 +20,27 @@ struct PaperPatternParameters: Codable, Equatable {
         case .engineering: return Self(spacingMM: 2, squaresPerBlock: 5)
         case .musicalStaves: return Self(spacingMM: 2)
         case .guitarTab: return Self(spacingMM: 3)
+        case .cornell: return Self(spacingMM: 8, cueFraction: 0.3, summaryMM: 50)
+        case .calligraphy: return Self(spacingMM: 3, xHeight: 5, slant: 7)
         }
         return Self(spacingMM: points / NotebookPaperSize.pointsPerMillimeter)
     }
 
     static func spacingRange(for pattern: PaperPattern) -> ClosedRange<Double> {
         switch pattern {
-        case .ruled: 5...12
+        case .ruled, .cornell: 5...12
         case .engineering: 1...5
         case .musicalStaves: 1.2...3
         case .guitarTab: 2...5
+        case .calligraphy: 1...8
         default: 3...15
         }
     }
 
     func isValid(for pattern: PaperPattern) -> Bool {
         pattern != .blank && Self.spacingRange(for: pattern).contains(spacingMM) &&
-            (0...60).contains(headerMM) && (0...60).contains(marginMM) && (0...1).contains(opacity) && (2...10).contains(squaresPerBlock ?? 5)
+            (0...60).contains(headerMM) && (0...60).contains(marginMM) && (0...1).contains(opacity) && (2...10).contains(squaresPerBlock ?? 5) &&
+            (0.15...0.45).contains(cueFraction ?? 0.3) && (25...90).contains(summaryMM ?? 50) &&
+            (3...8).contains(xHeight ?? 5) && (0...20).contains(slant ?? 7)
     }
 }

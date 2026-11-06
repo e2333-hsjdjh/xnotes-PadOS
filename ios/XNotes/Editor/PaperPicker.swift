@@ -84,6 +84,8 @@ extension PaperPattern {
         case .engineering: "Engineering paper"
         case .musicalStaves: "Musical staves"
         case .guitarTab: "Guitar tablature"
+        case .cornell: "Cornell notes"
+        case .calligraphy: "Calligraphy guide"
         }
     }
 }
@@ -106,12 +108,27 @@ private struct PaperParametersView: View {
                 .background(.white)
                 .border(Color.gray.opacity(0.5))
                 .frame(maxWidth: .infinity)
-            millimeters(pattern == .guitarTab ? "String spacing" : pattern == .musicalStaves ? "Staff line gap" : "Template spacing", value: $draft.spacingMM, range: PaperPatternParameters.spacingRange(for: pattern))
+            millimeters(spacingLabel, value: $draft.spacingMM, range: PaperPatternParameters.spacingRange(for: pattern))
             if pattern == .engineering {
                 let count = Binding(get: { draft.squaresPerBlock ?? 5 }, set: { draft.squaresPerBlock = $0 })
                 Stepper(value: count, in: 2...10) {
                     LabeledContent("Squares per block", value: count.wrappedValue.formatted())
                 }
+            }
+            if pattern == .cornell {
+                let cue = Binding(get: { draft.cueFraction ?? 0.3 }, set: { draft.cueFraction = $0 })
+                LabeledContent("Cue column width", value: cue.wrappedValue.formatted(.percent.precision(.fractionLength(0))))
+                Slider(value: cue, in: 0.15...0.45, step: 0.05).accessibilityLabel(Text("Cue column width"))
+                let summary = Binding(get: { draft.summaryMM ?? 50 }, set: { draft.summaryMM = $0 })
+                millimeters("Summary height", value: summary, range: 25...90)
+            }
+            if pattern == .calligraphy {
+                let height = Binding(get: { draft.xHeight ?? 5 }, set: { draft.xHeight = $0 })
+                let angle = Binding(get: { draft.slant ?? 7 }, set: { draft.slant = $0 })
+                LabeledContent("X-height in nib widths", value: height.wrappedValue.formatted())
+                Slider(value: height, in: 3...8, step: 0.5).accessibilityLabel(Text("X-height in nib widths"))
+                LabeledContent("Slant angle", value: "\(Int(angle.wrappedValue))°")
+                Slider(value: angle, in: 0...20, step: 1).accessibilityLabel(Text("Slant angle"))
             }
             if pattern == .ruled {
                 millimeters("Header height", value: $draft.headerMM, range: 0...60)
@@ -127,6 +144,15 @@ private struct PaperParametersView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Apply") { apply(draft) }
             }
+        }
+    }
+
+    private var spacingLabel: LocalizedStringKey {
+        switch pattern {
+        case .guitarTab: "String spacing"
+        case .musicalStaves: "Staff line gap"
+        case .calligraphy: "Nib width"
+        default: "Template spacing"
         }
     }
 

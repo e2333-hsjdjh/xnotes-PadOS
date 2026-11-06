@@ -5,8 +5,11 @@ import Foundation
 enum MusicPaperDrawing {
     static func positions(height: CGFloat, gap: CGFloat) -> [CGFloat] {
         let inset = CGFloat(15 * NotebookPaperSize.pointsPerMillimeter)
-        let usable = height - inset * 2
-        let period = gap * 10
+        return spacedPositions(length: height, inset: inset, period: gap * 10)
+    }
+
+    static func spacedPositions(length: CGFloat, inset: CGFloat, period: CGFloat) -> [CGFloat] {
+        let usable = length - inset * 2
         guard period > 0, usable >= period else { return [] }
         let count = Int(usable / period)
         if count == 1 { return [inset + (usable - period) / 2] }
