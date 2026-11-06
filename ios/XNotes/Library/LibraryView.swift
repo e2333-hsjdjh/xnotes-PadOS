@@ -21,9 +21,8 @@ struct LibraryView: View {
     @State private var showTrash = false
     @State private var importing = false
     @State private var exporting = false
-    @State private var export = ExportFile()
+    @State private var export: [ExportFile] = []
     @State private var exportType: UTType = .xnotesArchive
-    @State private var exportTitle = ""
     @State private var panes: [DocumentPane] = []
     @AppStorage("lastSplitWorkspace") private var lastSplitWorkspace = Data()
     @State private var renaming: Notebook?
@@ -52,7 +51,7 @@ struct LibraryView: View {
         }.sorted { sort.precedes($0, $1, descending: descending) }
     }
 
-    private var selectedForPDF: [Notebook] {
+    private var selectedForExport: [Notebook] {
         library.notebooks.filter { selectedDocuments.contains($0.id) && $0.trashedAt == nil }
             .sorted { sort.precedes($0, $1, descending: descending) }
     }
@@ -96,7 +95,8 @@ struct LibraryView: View {
                 open(try library.importFile(result.get(), into: currentFolder?.id))
             }
         }
-        .fileExporter(isPresented: $exporting, document: export, contentType: exportType, defaultFilename: exportTitle) {
+        .fileExporter(isPresented: $exporting, documents: export, contentType: exportType) {
+            export = []
             if case .failure(let error) = $0 { library.issue = error.localizedDescription }
         }
         .alert("Storage error", isPresented: Binding(
@@ -282,11 +282,12 @@ struct LibraryView: View {
                                 folderRequest = FolderRequest(action: .moveDocuments(selectedDocuments))
                             }
                             .disabled(selectedDocuments.isEmpty)
-                            Button("Export selected documents as PDF", systemImage: "square.and.arrow.up") {
-                                exportPDFs(selectedForPDF)
+                            Menu("Export selected documents", systemImage: "square.and.arrow.up") {
+                                Button("Export selected documents as PDF") { exportPDFs(selectedForExport) }
+                                Button("Export backups") { exportNotebooks(selectedForExport) }
                             }
                             .disabled(selectedDocuments.isEmpty ||
-                                      selectedForPDF.count != selectedDocuments.count)
+                                      selectedForExport.count != selectedDocuments.count)
                             Button(trashRetention == .off ? "Delete selected permanently" : "Trash selected documents",
                                    systemImage: "trash", role: .destructive) {
                                 removeFromLibrary(selectedDocuments)
@@ -368,14 +369,14 @@ struct LibraryView: View {
             Button("Move to folder", systemImage: "folder") {
                 folderRequest = FolderRequest(action: .moveDocuments([notebook.id]))
             }
-            Button("Export backup", systemImage: "square.and.arrow.up") { exportNotebook(notebook) }
+            Button("Export backup", systemImage: "square.and.arrow.up") { exportNotebooks([notebook]) }
             Button("Export PDF", systemImage: "doc.richtext") { exportPDF(notebook) }
             if notebook.kind == .pdf && notebook.pages.contains(where: { $0.pdfTextMarkups?.isEmpty == false }) {
                 Button("Export PDF with editable text markup", systemImage: "highlighter") {
                     perform {
-                        export = ExportFile(data: try PDFMarkupExport.data(for: notebook, source: library.pdf(for: notebook)))
+                        let data = try PDFMarkupExport.data(for: notebook, source: library.pdf(for: notebook))
+                        export = [ExportFile(data: data, filename: pdfFilename(notebook.title))]
                         exportType = .pdf
-                        exportTitle = notebook.title
                         exporting = true
                     }
                 }
@@ -537,11 +538,10 @@ struct LibraryView: View {
         }
     }
 
-    private func exportNotebook(_ notebook: Notebook) {
+    private func exportNotebooks(_ notebooks: [Notebook]) {
         perform {
-            export = ExportFile(data: try library.archive(for: notebook))
+            export = try BackupExport.files(for: notebooks, encode: library.archive(for:))
             exportType = .xnotesArchive
-            exportTitle = notebook.title
             exporting = true
         }
     }
@@ -555,11 +555,15 @@ struct LibraryView: View {
             let inputs = notebooks.map { notebook in
                 NotebookPDFExport.Input(notebook: notebook, source: library.pdf(for: notebook), darkCanvas: scheme == .dark)
             }
-            export = ExportFile(data: try NotebookPDFExport.data(for: inputs))
+            let title = notebooks.count == 1 ? notebooks[0].title : String(localized: "Selected documents")
+            export = [ExportFile(data: try NotebookPDFExport.data(for: inputs), filename: pdfFilename(title))]
             exportType = .pdf
-            exportTitle = notebooks.count == 1 ? notebooks[0].title : String(localized: "Selected documents")
             exporting = true
         }
+    }
+
+    private func pdfFilename(_ title: String) -> String {
+        title.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: ":", with: "_") + ".pdf"
     }
 
     private func perform(_ operation: () throws -> Void) {

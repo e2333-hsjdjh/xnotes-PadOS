@@ -183,3 +183,5 @@
 "Export selected pages" = "导出所选页面";
 "Export selected pages as PNG" = "将所选页面导出为 PNG";
 "Page export failed" = "页面导出失败";
+"Export selected documents" = "导出所选文档";
+"Export backups" = "导出备份文件";

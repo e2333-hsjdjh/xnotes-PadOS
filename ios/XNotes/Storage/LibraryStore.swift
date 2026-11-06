@@ -309,7 +309,11 @@ final class LibraryStore {
     }
 
     func archive(for notebook: Notebook) throws -> Data {
-        let pdf = try notebook.pdfDigest.map { try Data(contentsOf: pdfURL($0)) }
+        let pdf = try notebook.pdfDigest.map { expected in
+            let data = try Data(contentsOf: pdfURL(expected), options: .mappedIfSafe)
+            guard digest(data) == expected else { throw CocoaError(.fileReadCorruptFile) }
+            return data
+        }
         var portable = notebook
         portable.folderID = nil
         return try JSONEncoder().encode(NotebookArchive(version: 1, notebook: portable, originalPDF: pdf))
