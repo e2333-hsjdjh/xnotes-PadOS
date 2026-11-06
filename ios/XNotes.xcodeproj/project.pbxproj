@@ -1,0 +1,24 @@
+// !$*UTF8*$!
+{
+ archiveVersion = 1;
+ classes = {};
+ objectVersion = 77;
+ objects = {
+  A00000000000000000000001 = {isa = PBXProject; attributes = {LastUpgradeCheck = 2700;}; buildConfigurationList = A00000000000000000000009; compatibilityVersion = "Xcode 16.0"; developmentRegion = en; knownRegions = (en, Base, "zh-Hans"); mainGroup = A00000000000000000000002; productRefGroup = A00000000000000000000004; projectDirPath = ""; targets = (A00000000000000000000006);};
+  A00000000000000000000002 = {isa = PBXGroup; children = (A00000000000000000000003, A0000000000000000000000F, A00000000000000000000004); sourceTree = "<group>";};
+  A00000000000000000000003 = {isa = PBXFileSystemSynchronizedRootGroup; path = XNotes; sourceTree = "<group>";};
+  A00000000000000000000004 = {isa = PBXGroup; children = (A00000000000000000000005); name = Products; sourceTree = "<group>";};
+  A00000000000000000000005 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = XNotes.app; sourceTree = BUILT_PRODUCTS_DIR;};
+  A00000000000000000000006 = {isa = PBXNativeTarget; buildConfigurationList = A0000000000000000000000A; buildPhases = (A00000000000000000000007, A00000000000000000000008); fileSystemSynchronizedGroups = (A00000000000000000000003); name = XNotes; productName = XNotes; productReference = A00000000000000000000005; productType = "com.apple.product-type.application";};
+  A00000000000000000000007 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+  A00000000000000000000008 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+  A00000000000000000000009 = {isa = XCConfigurationList; buildConfigurations = (A0000000000000000000000B, A0000000000000000000000C); defaultConfigurationName = Release;};
+  A0000000000000000000000A = {isa = XCConfigurationList; buildConfigurations = (A0000000000000000000000D, A0000000000000000000000E); defaultConfigurationName = Release;};
+  A0000000000000000000000B = {isa = XCBuildConfiguration; name = Debug; buildSettings = {SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; SWIFT_OPTIMIZATION_LEVEL = "-Onone";};};
+  A0000000000000000000000C = {isa = XCBuildConfiguration; name = Release; buildSettings = {SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0;};};
+  A0000000000000000000000D = {isa = XCBuildConfiguration; name = Debug; baseConfigurationReference = A0000000000000000000000F; buildSettings = {};};
+  A0000000000000000000000E = {isa = XCBuildConfiguration; name = Release; baseConfigurationReference = A0000000000000000000000F; buildSettings = {};};
+  A0000000000000000000000F = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = XNotes.xcconfig; sourceTree = SOURCE_ROOT;};
+ };
+ rootObject = A00000000000000000000001;
+}

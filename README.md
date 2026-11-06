@@ -39,3 +39,7 @@
 本项目源自 [XNotes Android](https://github.com/shardulvs/xnotes-android)，沿用 [MIT 许可证](LICENSE)。
 
 通用按键录入的实现、源码参考与验证边界见 [开发记录](docs/movinkpad/recordable-pen-shortcuts-2026-11-05.md)。
+
+## iOS 移植
+
+原生 SwiftUI 工程、运行说明与 Android 功能对照表见 [XNotes for iOS](ios/README.md)。当前为移植的首个功能阶段。

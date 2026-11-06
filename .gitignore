@@ -37,3 +37,7 @@ tmp/
 .venv/
 __pycache__/
 docs/evidence/
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
