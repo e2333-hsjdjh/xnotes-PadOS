@@ -4,6 +4,9 @@ import UniformTypeIdentifiers
 struct LibraryView: View {
     @Bindable var library: LibraryStore
     @AppStorage("appearance") private var appearance = "system"
+    @AppStorage("librarySort") private var sort = LibrarySort.modified
+    @AppStorage("libraryDescending") private var descending = true
+    @AppStorage("libraryLayout") private var layout = LibraryLayout.list
     @State private var query = ""
     @State private var folderID: UUID?
     @State private var folderDraft: LibraryFolder?
@@ -25,18 +28,21 @@ struct LibraryView: View {
 
     private var childFolders: [LibraryFolder] {
         guard !showTrash else { return [] }
-        return library.folders.filter { $0.parentID == currentFolder?.id }.sorted {
+        return library.folders.filter {
+            $0.parentID == currentFolder?.id && (query.isEmpty || $0.name.localizedStandardContains(query))
+        }.sorted {
             $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
     }
 
     private var documents: [Notebook] {
-        library.notebooks.filter { notebook in
+        let folderIDs = Set(library.folders.map(\.id))
+        return library.notebooks.filter { notebook in
             (notebook.trashedAt != nil) == showTrash &&
-            (showTrash || (library.folders.contains { $0.id == notebook.folderID } ? notebook.folderID : nil) == currentFolder?.id) &&
+            (showTrash || (notebook.folderID.flatMap { folderIDs.contains($0) ? $0 : nil }) == currentFolder?.id) &&
             (query.isEmpty || notebook.title.localizedStandardContains(query) ||
                 notebook.pages.contains { $0.text.localizedStandardContains(query) })
-        }.sorted { $0.modified > $1.modified }
+        }.sorted { sort.precedes($0, $1, descending: descending) }
     }
 
     var body: some View {
@@ -120,63 +126,16 @@ struct LibraryView: View {
 
     private var explorer: some View {
         NavigationStack {
-            List {
-                if library.unreadableCount > 0 {
-                    Text("Some documents could not be read. Their files were kept.")
-                }
-                if !showTrash, let currentFolder {
-                    Button {
-                        folderID = currentFolder.parentID
-                        query = ""
-                    } label: {
-                        Label("Parent folder", systemImage: "arrow.up")
-                    }
-                }
-                ForEach(childFolders.filter { query.isEmpty || $0.name.localizedStandardContains(query) }) { folder in
-                    Button {
-                        folderID = folder.id
-                        query = ""
-                    } label: {
-                        Label(folder.name, systemImage: "folder")
-                    }
-                    .contextMenu {
-                        Button("Rename", systemImage: "pencil") { editFolder(folder) }
-                        Button("Delete empty folder", systemImage: "trash", role: .destructive) {
-                            perform { try library.deleteFolder(folder) }
+            Group {
+                if layout == .grid {
+                    ScrollView {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 12)], spacing: 12) {
+                            libraryEntries
                         }
-                        .disabled(library.unreadableCount > 0 || library.folders.contains { $0.parentID == folder.id } ||
-                                  library.notebooks.contains { $0.folderID == folder.id })
+                        .padding()
                     }
-                }
-                if documents.isEmpty && childFolders.isEmpty {
-                    ContentUnavailableView(showTrash ? "Trash is empty" : "No documents", systemImage: "tray")
-                }
-                ForEach(documents) { notebook in
-                    Button {
-                        if !showTrash { open(notebook.id) }
-                    } label: {
-                        Label(notebook.title, systemImage: notebook.kind.symbol)
-                    }
-                    .contextMenu {
-                        if showTrash {
-                            Button("Restore", systemImage: "arrow.uturn.backward") { setTrashed(notebook, false) }
-                            Button("Delete permanently", systemImage: "trash", role: .destructive) { deleting = notebook }
-                        } else {
-                            Button("Rename", systemImage: "pencil") {
-                                title = notebook.title
-                                renaming = notebook
-                            }
-                            Button("Move to folder", systemImage: "folder") {
-                                moveDocumentID = notebook.id
-                                showFolders = true
-                            }
-                            Button("Export backup", systemImage: "square.and.arrow.up") { exportNotebook(notebook) }
-                            if notebook.kind != .canvas {
-                                Button("Export PDF", systemImage: "doc.richtext") { exportPDF(notebook) }
-                            }
-                            Button("Move to Trash", systemImage: "trash", role: .destructive) { setTrashed(notebook, true) }
-                        }
-                    }
+                } else {
+                    List { libraryEntries }
                 }
             }
             .navigationTitle(showTrash ? Text("Trash") : Text(currentFolder?.name ?? "XNotes"))
@@ -191,6 +150,16 @@ struct LibraryView: View {
                         if !showTrash {
                             Button("Folders", systemImage: "folder") { showFolders = true }
                         }
+                        Picker("Layout", selection: $layout) {
+                            Text("List").tag(LibraryLayout.list)
+                            Text("Grid").tag(LibraryLayout.grid)
+                        }
+                        Picker("Sort by", selection: $sort) {
+                            Text("Name").tag(LibrarySort.name)
+                            Text("Date modified").tag(LibrarySort.modified)
+                            Text("Date created").tag(LibrarySort.created)
+                        }
+                        Toggle("Descending order", isOn: $descending)
                         Picker("Appearance", selection: $appearance) {
                             Text("System").tag("system")
                             Text("Light").tag("light")
@@ -210,6 +179,85 @@ struct LibraryView: View {
                     .disabled(showTrash)
                 }
             }
+        }
+    }
+
+    @ViewBuilder private var libraryEntries: some View {
+        if library.unreadableCount > 0 {
+            Text("Some documents could not be read. Their files were kept.")
+        }
+        if !showTrash, let currentFolder {
+            Button {
+                folderID = currentFolder.parentID
+                query = ""
+            } label: {
+                entryLabel(Text("Parent folder"), symbol: "arrow.up")
+            }
+        }
+        ForEach(childFolders) { folder in
+            Button {
+                folderID = folder.id
+                query = ""
+            } label: {
+                entryLabel(Text(verbatim: folder.name), symbol: "folder")
+            }
+            .contextMenu {
+                Button("Rename", systemImage: "pencil") { editFolder(folder) }
+                Button("Delete empty folder", systemImage: "trash", role: .destructive) {
+                    perform { try library.deleteFolder(folder) }
+                }
+                .disabled(library.unreadableCount > 0 || library.folders.contains { $0.parentID == folder.id } ||
+                          library.notebooks.contains { $0.folderID == folder.id })
+            }
+        }
+        if documents.isEmpty && childFolders.isEmpty {
+            if query.isEmpty {
+                ContentUnavailableView(showTrash ? "Trash is empty" : "No documents", systemImage: "tray")
+            } else {
+                ContentUnavailableView.search(text: query)
+            }
+        }
+        ForEach(documents) { notebook in
+            Button {
+                if !showTrash { open(notebook.id) }
+            } label: {
+                entryLabel(Text(verbatim: notebook.title), symbol: notebook.kind.symbol)
+            }
+            .contextMenu {
+                if showTrash {
+                    Button("Restore", systemImage: "arrow.uturn.backward") { setTrashed(notebook, false) }
+                    Button("Delete permanently", systemImage: "trash", role: .destructive) { deleting = notebook }
+                } else {
+                    Button("Rename", systemImage: "pencil") {
+                        title = notebook.title
+                        renaming = notebook
+                    }
+                    Button("Move to folder", systemImage: "folder") {
+                        moveDocumentID = notebook.id
+                        showFolders = true
+                    }
+                    Button("Export backup", systemImage: "square.and.arrow.up") { exportNotebook(notebook) }
+                    if notebook.kind != .canvas {
+                        Button("Export PDF", systemImage: "doc.richtext") { exportPDF(notebook) }
+                    }
+                    Button("Move to Trash", systemImage: "trash", role: .destructive) { setTrashed(notebook, true) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func entryLabel(_ title: Text, symbol: String) -> some View {
+        if layout == .grid {
+            VStack(spacing: 8) {
+                Image(systemName: symbol).font(.title2)
+                title.font(.subheadline).lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, minHeight: 92)
+            .padding(8)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+            .contentShape(Rectangle())
+        } else {
+            Label { title } icon: { Image(systemName: symbol) }
         }
     }
 

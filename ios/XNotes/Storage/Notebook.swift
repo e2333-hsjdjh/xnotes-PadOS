@@ -67,6 +67,7 @@ struct Notebook: Codable, Identifiable {
     var title: String
     var kind: NotebookKind
     var modified = Date()
+    var created: Date? = .now
     var trashedAt: Date?
     var folderID: UUID?
     var pages = [NotePage()]

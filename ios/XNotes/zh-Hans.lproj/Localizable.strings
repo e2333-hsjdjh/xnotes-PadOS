@@ -91,3 +91,10 @@
 "New folder" = "新建文件夹";
 "Move to folder" = "移动到文件夹";
 "Delete empty folder" = "删除空文件夹";
+"Layout" = "显示方式";
+"List" = "列表";
+"Grid" = "网格";
+"Sort by" = "排序方式";
+"Date modified" = "修改时间";
+"Date created" = "创建时间";
+"Descending order" = "降序";
