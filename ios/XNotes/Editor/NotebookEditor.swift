@@ -9,7 +9,8 @@ struct NotebookEditor<SplitChoices: View>: View {
     @ViewBuilder let splitChoices: () -> SplitChoices
 
     @Environment(\.colorScheme) private var scheme
-    @State private var pageIndex = 0
+    @State private var selectedPageID: UUID?
+    @State private var showPages = false
     @State private var selectedLayer: UUID?
     @State private var tool: InkTool = .pen
     @State private var width = 3.0
@@ -22,6 +23,10 @@ struct NotebookEditor<SplitChoices: View>: View {
     @State private var pdf: PDFDocument?
     @State private var pdfImage: UIImage?
     @State private var history = InkHistory()
+
+    private var pageIndex: Int {
+        notebook.pages.firstIndex { $0.id == selectedPageID } ?? 0
+    }
 
     private var page: NotePage { notebook.pages[pageIndex] }
     private var activeLayer: UUID {
@@ -61,9 +66,21 @@ struct NotebookEditor<SplitChoices: View>: View {
             pdf = library.pdf(for: notebook)
             loadBackground()
         }
-        .onChange(of: pageIndex) {
+        .onChange(of: page.id) {
             selectedLayer = nil
             loadBackground()
+        }
+        .sheet(isPresented: $showPages) {
+            PageNavigator(
+                pages: notebook.pages,
+                current: page.id,
+                editable: notebook.kind == .notebook,
+                open: { selectedPageID = $0 },
+                add: addPage,
+                duplicate: duplicatePage,
+                delete: deletePage,
+                move: movePages
+            )
         }
         .sheet(isPresented: $editingText) {
             NavigationStack {
@@ -173,26 +190,54 @@ struct NotebookEditor<SplitChoices: View>: View {
 
     private var pageBar: some View {
         HStack {
-            icon("Previous page", "chevron.left") { pageIndex -= 1 }
+            icon("Previous page", "chevron.left") { selectedPageID = notebook.pages[pageIndex - 1].id }
                 .disabled(pageIndex == 0)
-            Menu {
-                ForEach(notebook.pages.indices, id: \.self) { index in
-                    Button("\(index + 1)") { pageIndex = index }
-                }
-            } label: {
+            Button { showPages = true } label: {
                 Text("\(pageIndex + 1) / \(notebook.pages.count)")
-                    .frame(minHeight: 48)
+                    .frame(minWidth: 48, minHeight: 48)
             }
-            icon("Next page", "chevron.right") { pageIndex += 1 }
+            .accessibilityLabel(Text("Pages"))
+            icon("Next page", "chevron.right") { selectedPageID = notebook.pages[pageIndex + 1].id }
                 .disabled(pageIndex + 1 == notebook.pages.count)
             if notebook.kind == .notebook {
-                icon("Add page", "plus") {
-                    var updated = notebook
-                    updated.pages.append(NotePage())
-                    if save(updated) { pageIndex = updated.pages.count - 1 }
-                }
+                icon("Add page", "plus", action: addPage)
             }
         }
+    }
+
+    private func addPage() {
+        var updated = notebook
+        let newPage = NotePage()
+        updated.pages.insert(newPage, at: pageIndex + 1)
+        if save(updated) { selectedPageID = newPage.id }
+    }
+
+    private func duplicatePage(_ id: UUID) {
+        var updated = notebook
+        guard let index = updated.pages.firstIndex(where: { $0.id == id }) else { return }
+        var copy = updated.pages[index]
+        copy.id = UUID()
+        for index in copy.layers.indices { copy.layers[index].id = UUID() }
+        updated.pages.insert(copy, at: index + 1)
+        if save(updated) { selectedPageID = copy.id }
+    }
+
+    private func deletePage(_ id: UUID) {
+        var updated = notebook
+        guard updated.pages.count > 1,
+              let index = updated.pages.firstIndex(where: { $0.id == id }) else { return }
+        let current = page.id
+        updated.pages.remove(at: index)
+        if save(updated) {
+            selectedPageID = current == id ? updated.pages[min(index, updated.pages.count - 1)].id : current
+        }
+    }
+
+    private func movePages(_ indices: IndexSet, _ destination: Int) {
+        var updated = notebook
+        let current = page.id
+        updated.pages.move(fromOffsets: indices, toOffset: destination)
+        if save(updated) { selectedPageID = current }
     }
 
     private var layerPanel: some View {
