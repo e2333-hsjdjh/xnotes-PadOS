@@ -82,6 +82,8 @@ extension PaperPattern {
         case .grid: "Square grid"
         case .dots: "Dot grid"
         case .engineering: "Engineering paper"
+        case .musicalStaves: "Musical staves"
+        case .guitarTab: "Guitar tablature"
         }
     }
 }
@@ -104,7 +106,7 @@ private struct PaperParametersView: View {
                 .background(.white)
                 .border(Color.gray.opacity(0.5))
                 .frame(maxWidth: .infinity)
-            millimeters("Template spacing", value: $draft.spacingMM, range: PaperPatternParameters.spacingRange(for: pattern))
+            millimeters(pattern == .guitarTab ? "String spacing" : pattern == .musicalStaves ? "Staff line gap" : "Template spacing", value: $draft.spacingMM, range: PaperPatternParameters.spacingRange(for: pattern))
             if pattern == .engineering {
                 let count = Binding(get: { draft.squaresPerBlock ?? 5 }, set: { draft.squaresPerBlock = $0 })
                 Stepper(value: count, in: 2...10) {

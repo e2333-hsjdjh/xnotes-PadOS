@@ -39,6 +39,9 @@ extension PaperPattern {
                 context.addLine(to: CGPoint(x: size.width, y: y))
             }
             context.strokePath()
+        case .musicalStaves, .guitarTab:
+            MusicPaperDrawing.draw(in: context, size: size, gap: spacing, tablature: self == .guitarTab,
+                                   gray: gray, opacity: values.opacity)
         case .engineering:
             Self.drawEngineering(in: context, size: size, spacing: spacing, group: values.squaresPerBlock ?? 5,
                                  gray: gray, opacity: values.opacity, preview: preview)

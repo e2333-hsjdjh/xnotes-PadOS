@@ -223,3 +223,7 @@
 "%.1f mm" = "%.1f 毫米";
 "Engineering paper" = "工程方格纸";
 "Squares per block" = "每组格数";
+"Musical staves" = "五线谱";
+"Guitar tablature" = "吉他六线谱";
+"String spacing" = "琴弦间距";
+"Staff line gap" = "谱线间距";

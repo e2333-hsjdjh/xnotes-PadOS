@@ -14,6 +14,8 @@ struct PaperPatternParameters: Codable, Equatable {
         case .grid: points = 16
         case .dots: points = 14
         case .engineering: return Self(spacingMM: 2, squaresPerBlock: 5)
+        case .musicalStaves: return Self(spacingMM: 2)
+        case .guitarTab: return Self(spacingMM: 3)
         }
         return Self(spacingMM: points / NotebookPaperSize.pointsPerMillimeter)
     }
@@ -22,6 +24,8 @@ struct PaperPatternParameters: Codable, Equatable {
         switch pattern {
         case .ruled: 5...12
         case .engineering: 1...5
+        case .musicalStaves: 1.2...3
+        case .guitarTab: 2...5
         default: 3...15
         }
     }
