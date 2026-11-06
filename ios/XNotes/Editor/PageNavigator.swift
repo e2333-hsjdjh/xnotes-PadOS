@@ -8,13 +8,16 @@ struct PageNavigator: View {
     let pdf: PDFDocument?
     let open: (UUID) -> Void
     let add: () -> Void
-    let duplicate: (UUID) -> Void
-    let delete: (UUID) -> Void
+    let duplicate: (Set<UUID>) -> Bool
+    let delete: (Set<UUID>) -> Bool
     let move: (IndexSet, Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
-    @State private var deleting: UUID?
+    @State private var deleting: Set<UUID> = []
+    @State private var selecting = false
+    @State private var selected: Set<UUID> = []
+    @State private var editMode: EditMode = .inactive
     @State private var pdfMatches: [UUID: String] = [:]
     @State private var searchedQuery = ""
     @State private var searching = false
@@ -28,7 +31,7 @@ struct PageNavigator: View {
             List {
                 if term.isEmpty {
                     ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in row(page, index: index) }
-                        .onMove(perform: editable ? move : nil)
+                        .onMove(perform: editable && !selecting ? move : nil)
                 } else {
                     let snippets = currentPDFMatches
                     let matches = pages.enumerated().filter { _, page in
@@ -44,6 +47,7 @@ struct PageNavigator: View {
                     }
                 }
             }
+            .environment(\.editMode, $editMode)
             .searchable(text: $query)
             .task {
                 if let pdf { outline = PDFOutlineEntry.entries(in: pdf) }
@@ -52,7 +56,9 @@ struct PageNavigator: View {
             .navigationTitle("Pages")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button(selecting ? "Cancel selection" : "Done") {
+                        if selecting { endSelection() } else { dismiss() }
+                    }
                 }
                 if !outline.isEmpty {
                     ToolbarItem(placement: .primaryAction) {
@@ -67,22 +73,62 @@ struct PageNavigator: View {
                         }
                     }
                 }
-                if editable && term.isEmpty {
+                if editable {
                     ToolbarItemGroup(placement: .primaryAction) {
-                        EditButton()
-                        Button("Add page", systemImage: "plus", action: add)
+                        if selecting {
+                            Button("Select all pages") { selected = Set(pages.map(\.id)) }
+                                .disabled(selected.count == pages.count)
+                        } else {
+                            Button("Select pages") {
+                                editMode = .inactive
+                                selecting = true
+                            }
+                            if term.isEmpty {
+                                Button(editMode.isEditing ? "Done reordering" : "Reorder pages") {
+                                    editMode = editMode.isEditing ? .inactive : .active
+                                }
+                                Button("Add page", systemImage: "plus", action: add)
+                            }
+                        }
+                    }
+                }
+                if selecting {
+                    ToolbarItemGroup(placement: .bottomBar) {
+                        Text("\(selected.count) selected")
+                        Spacer()
+                        Button("Duplicate pages", systemImage: "plus.square.on.square") {
+                            if duplicate(selected) { endSelection() }
+                        }
+                        .disabled(selected.isEmpty)
+                        Button("Delete pages", systemImage: "trash", role: .destructive) {
+                            deleting = selected
+                        }
+                        .disabled(selected.isEmpty || selected.count >= pages.count)
                     }
                 }
             }
-            .confirmationDialog("Delete this page?", isPresented: Binding(
-                get: { deleting != nil },
-                set: { if !$0 { deleting = nil } }
+            .confirmationDialog(deleting.count == 1 ? "Delete this page?" : "Delete selected pages?", isPresented: Binding(
+                get: { !deleting.isEmpty },
+                set: { if !$0 { deleting = [] } }
             ), titleVisibility: .visible) {
-                Button("Delete page", role: .destructive) {
-                    if let deleting { delete(deleting) }
+                Button(deleting.count == 1 ? "Delete page" : "Delete pages", role: .destructive) {
+                    if delete(deleting) { endSelection() }
+                    deleting = []
+                }
+            }
+            .onChange(of: editable) {
+                if !editable {
+                    endSelection()
+                    deleting = []
+                    editMode = .inactive
                 }
             }
         }
+    }
+
+    private func endSelection() {
+        selecting = false
+        selected = []
     }
 
     @MainActor
@@ -120,8 +166,12 @@ struct PageNavigator: View {
 
     private func row(_ page: NotePage, index: Int, pdfSnippet: String? = nil) -> some View {
         Button {
-            open(page.id)
-            dismiss()
+            if selecting {
+                if selected.remove(page.id) == nil { selected.insert(page.id) }
+            } else {
+                open(page.id)
+                dismiss()
+            }
         } label: {
             HStack(spacing: 12) {
                 PageThumbnail(page: page, index: index, pdf: pdf)
@@ -136,15 +186,20 @@ struct PageNavigator: View {
                     }
                 }
                 Spacer()
-                if page.id == current { Image(systemName: "checkmark") }
+                if selecting {
+                    Image(systemName: selected.contains(page.id) ? "checkmark.circle.fill" : "circle")
+                } else if page.id == current {
+                    Image(systemName: "checkmark")
+                }
             }
             .frame(minHeight: 48)
             .contentShape(Rectangle())
         }
+        .accessibilityAddTraits(selecting && selected.contains(page.id) ? .isSelected : [])
         .contextMenu {
-            if editable {
-                Button("Duplicate page", systemImage: "plus.square.on.square") { duplicate(page.id) }
-                Button("Delete page", systemImage: "trash", role: .destructive) { deleting = page.id }
+            if editable && !selecting {
+                Button("Duplicate page", systemImage: "plus.square.on.square") { _ = duplicate([page.id]) }
+                Button("Delete page", systemImage: "trash", role: .destructive) { deleting = [page.id] }
                     .disabled(pages.count == 1)
             }
         }

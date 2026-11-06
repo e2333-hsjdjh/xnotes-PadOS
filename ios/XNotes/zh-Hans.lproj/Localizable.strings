@@ -110,3 +110,12 @@
 "Legal" = "美式法律纸";
 "Custom" = "自定义";
 "Content keeps its position. A smaller page can hide content beyond its edges." = "内容会保留原位置。缩小纸张可能隐藏超出页面边缘的内容。";
+"Select pages" = "选择页面";
+"Select all pages" = "选择全部页面";
+"Cancel selection" = "取消选择";
+"%lld selected" = "已选择 %lld 页";
+"Duplicate pages" = "复制所选页面";
+"Delete pages" = "删除所选页面";
+"Delete selected pages?" = "删除所选页面？";
+"Reorder pages" = "调整页面顺序";
+"Done reordering" = "完成排序";

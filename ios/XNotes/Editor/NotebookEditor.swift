@@ -108,8 +108,8 @@ struct NotebookEditor<SplitChoices: View>: View {
                 pdf: pdf,
                 open: { selectedPageID = $0 },
                 add: addPage,
-                duplicate: duplicatePage,
-                delete: deletePage,
+                duplicate: duplicatePages,
+                delete: deletePages,
                 move: movePages
             )
         }
@@ -301,31 +301,22 @@ struct NotebookEditor<SplitChoices: View>: View {
         if save(updated) { selectedPageID = newPage.id }
     }
 
-    private func duplicatePage(_ id: UUID) {
+    private func duplicatePages(_ ids: Set<UUID>) -> Bool {
         guard var updated = latestNotebook,
-              let index = updated.pages.firstIndex(where: { $0.id == id }) else { return }
-        var copy = updated.pages[index]
-        copy.id = UUID()
-        if let images = copy.images {
-            copy.images = images.map { image in
-                var copy = image
-                copy.id = UUID()
-                return copy
-            }
-        }
-        for index in copy.layers.indices { copy.layers[index].id = UUID() }
-        updated.pages.insert(copy, at: index + 1)
-        if save(updated) { selectedPageID = copy.id }
+              let result = PageBatch.duplicate(ids, in: updated.pages) else { return false }
+        updated.pages = result.pages
+        guard save(updated) else { return false }
+        selectedPageID = result.firstCopy
+        return true
     }
 
-    private func deletePage(_ id: UUID) {
-        guard var updated = latestNotebook, updated.pages.count > 1,
-              let index = updated.pages.firstIndex(where: { $0.id == id }) else { return }
-        let current = page.id
-        updated.pages.remove(at: index)
-        if save(updated) {
-            selectedPageID = current == id ? updated.pages[min(index, updated.pages.count - 1)].id : current
-        }
+    private func deletePages(_ ids: Set<UUID>) -> Bool {
+        guard var updated = latestNotebook,
+              let result = PageBatch.remove(ids, from: updated.pages, current: page.id) else { return false }
+        updated.pages = result.pages
+        guard save(updated) else { return false }
+        selectedPageID = result.current
+        return true
     }
 
     private func movePages(_ indices: IndexSet, _ destination: Int) {
