@@ -98,7 +98,9 @@ struct NotebookEditor<SplitChoices: View>: View {
     private var currentPDFPage: PDFPage? { pdfSources.page(for: page, at: pageIndex) }
     private var missingPagePDF: Bool { page.pdfBackground != nil && currentPDFPage == nil }
     private var canEdit: Bool { !readOnly && !missingPagePDF && (notebook.kind != .pdf || pdf != nil) }
-    private var darkPaper: Bool { scheme == .dark && notebook.kind != .pdf && page.pdfBackground == nil }
+    private var darkPaper: Bool {
+        page.coverArtwork?.usesLightInk ?? (scheme == .dark && notebook.kind != .pdf && page.pdfBackground == nil)
+    }
     private var paperSize: CGSize {
         if let pdfImage { return pdfImage.size }
         if notebook.kind == .canvas { return NotebookPageDrawing.canvasSize }
@@ -242,8 +244,8 @@ struct NotebookEditor<SplitChoices: View>: View {
         }
         .sheet(isPresented: $showCoverPicker) {
             let cover = notebook.pages.first.flatMap { $0.isCover == true ? $0 : nil }
-            PaperPicker(selection: cover.map { $0.paperPattern ?? .blank }, title: "Cover page") { pattern in
-                setCover(pattern)
+            CoverPicker(selection: cover?.coverArtwork) { pattern, artwork in
+                setCover(pattern, artwork: artwork)
             }
         }
         .sheet(isPresented: $showPaper) {
@@ -430,7 +432,9 @@ struct NotebookEditor<SplitChoices: View>: View {
         let pageID = page.id
         return ZStack(alignment: .topLeading) {
             darkPaper ? Color.black : Color.white
-            if let pattern = page.paperPattern, notebook.kind == .notebook, page.pdfBackground == nil {
+            if let artwork = page.coverArtwork {
+                NotebookCoverArtwork(cover: artwork)
+            } else if let pattern = page.paperPattern, notebook.kind == .notebook, page.pdfBackground == nil {
                 PaperPatternView(pattern: pattern, dark: darkPaper)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
@@ -539,9 +543,9 @@ struct NotebookEditor<SplitChoices: View>: View {
         showPages = false
     }
 
-    private func setCover(_ pattern: PaperPattern) -> Bool {
+    private func setCover(_ pattern: PaperPattern, artwork: NotebookCover?) -> Bool {
         guard !readOnly, notebook.kind == .notebook, var updated = latestNotebook else { return false }
-        let pages = PageBatch.cover(pattern, in: updated.pages)
+        let pages = PageBatch.cover(pattern, artwork: artwork, in: updated.pages)
         if pages == updated.pages { return true }
         updated.pages = pages
         guard save(updated) else { return false }

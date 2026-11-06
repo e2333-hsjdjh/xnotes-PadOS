@@ -46,10 +46,12 @@ enum NotebookPageDrawing {
             try draw(original, in: bounds, with: graphics)
             PDFTextMarkupDrawing.draw(page.pdfTextMarkups ?? [], in: graphics, size: bounds.size,
                                       rotation: original.rotation)
+        } else if let artwork = page.coverArtwork {
+            artwork.draw(in: graphics, size: bounds.size)
         } else if let pattern = page.paperPattern {
             pattern.draw(in: graphics, size: bounds.size, dark: dark)
         }
-        try drawContents(page, in: bounds, visible: visible, inkScale: inkScale, dark: dark)
+        try drawContents(page, in: bounds, visible: visible, inkScale: inkScale, dark: page.coverArtwork?.usesLightInk ?? dark)
     }
 
     private static func draw(_ page: PDFPage, in bounds: CGRect, with graphics: CGContext) throws {

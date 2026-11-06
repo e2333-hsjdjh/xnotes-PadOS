@@ -1,0 +1,8 @@
+Cover art reused from the bundled Android XNotes template packages.
+
+cover-cloth.webp — Rob Tuytel / Poly Haven, CC0.
+cover-kanagawa.webp — Katsushika Hokusai, Under the Wave off Kanagawa,
+The Metropolitan Museum of Art, public domain.
+cover-earthrise.webp — Bill Anders, Apollo 8, NASA, public domain.
+
+The corresponding Android templates are MIT licensed. See the repository LICENSE.
