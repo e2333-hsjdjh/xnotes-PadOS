@@ -460,7 +460,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             pdfImage = nil
             return
         }
-        guard let size = try? NotebookPDFExport.thumbnailRequest(page) else {
+        guard let size = try? NotebookPageDrawing.thumbnailRequest(page) else {
             pdfImage = nil
             return
         }

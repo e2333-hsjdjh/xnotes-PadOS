@@ -27,17 +27,21 @@ struct PageNavigator: View {
         NavigationStack {
             List {
                 if term.isEmpty {
-                    ForEach(pages) { page in row(page) }
+                    ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in row(page, index: index) }
                         .onMove(perform: editable ? move : nil)
                 } else {
                     let snippets = currentPDFMatches
-                    let matches = pages.filter { $0.text.localizedStandardContains(term) || snippets[$0.id] != nil }
+                    let matches = pages.enumerated().filter { _, page in
+                        page.text.localizedStandardContains(term) || snippets[page.id] != nil
+                    }
                     if pdf != nil && (searching || searchedQuery != term) {
                         ProgressView("Searching PDF")
                     } else if matches.isEmpty {
                         ContentUnavailableView.search(text: term)
                     }
-                    ForEach(matches) { page in row(page, pdfSnippet: snippets[page.id]) }
+                    ForEach(matches, id: \.element.id) { index, page in
+                        row(page, index: index, pdfSnippet: snippets[page.id])
+                    }
                 }
             }
             .searchable(text: $query)
@@ -114,15 +118,16 @@ struct PageNavigator: View {
         }
     }
 
-    private func row(_ page: NotePage, pdfSnippet: String? = nil) -> some View {
-        let number = (pages.firstIndex { $0.id == page.id } ?? 0) + 1
-        return Button {
+    private func row(_ page: NotePage, index: Int, pdfSnippet: String? = nil) -> some View {
+        Button {
             open(page.id)
             dismiss()
         } label: {
-            HStack {
+            HStack(spacing: 12) {
+                PageThumbnail(page: page, index: index, pdf: pdf)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading) {
-                    Text("Page \(number)")
+                    Text("Page \(index + 1)")
                     if let pdfSnippet {
                         Text(pdfSnippet).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     }
