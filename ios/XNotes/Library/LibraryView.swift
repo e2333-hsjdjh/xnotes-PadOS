@@ -23,7 +23,7 @@ struct LibraryView: View {
     @State private var exportTitle = ""
     @State private var panes: [DocumentPane] = []
     @State private var renaming: Notebook?
-    @State private var deleting: Notebook?
+    @State private var deleting: Set<UUID> = []
     @State private var title = ""
 
     private var currentFolder: LibraryFolder? { library.folders.first { $0.id == folderID } }
@@ -124,12 +124,18 @@ struct LibraryView: View {
                 }
             }
         }
-        .confirmationDialog("Permanently delete this document?", isPresented: Binding(
-            get: { deleting != nil },
-            set: { if !$0 { deleting = nil } }
-        ), titleVisibility: .visible) {
+        .confirmationDialog(
+            Text("Permanently delete \(deleting.count) documents?"),
+            isPresented: Binding(
+                get: { !deleting.isEmpty },
+                set: { if !$0 { deleting = [] } }
+            ),
+            titleVisibility: .visible,
+            presenting: deleting
+        ) { ids in
             Button("Delete permanently", role: .destructive) {
-                if let deleting { perform { try library.delete(deleting) } }
+                applyBatch(.deletePermanently, to: ids)
+                deleting = []
             }
         }
     }
@@ -205,6 +211,10 @@ struct LibraryView: View {
                         if showTrash {
                             Button("Restore selected documents", systemImage: "arrow.uturn.backward") {
                                 applyBatch(.trash(false), to: selectedDocuments)
+                            }
+                            .disabled(selectedDocuments.isEmpty)
+                            Button("Delete selected permanently", systemImage: "trash", role: .destructive) {
+                                deleting = selectedDocuments
                             }
                             .disabled(selectedDocuments.isEmpty)
                         } else {
@@ -288,7 +298,7 @@ struct LibraryView: View {
     @ViewBuilder private func documentActions(_ notebook: Notebook) -> some View {
         if showTrash {
             Button("Restore", systemImage: "arrow.uturn.backward") { setTrashed(notebook, false) }
-            Button("Delete permanently", systemImage: "trash", role: .destructive) { deleting = notebook }
+            Button("Delete permanently", systemImage: "trash", role: .destructive) { deleting = [notebook.id] }
         } else {
             Button("Rename", systemImage: "pencil") {
                 title = notebook.title

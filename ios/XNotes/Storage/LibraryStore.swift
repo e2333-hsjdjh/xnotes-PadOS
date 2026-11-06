@@ -115,6 +115,7 @@ final class LibraryStore {
     enum DocumentChange {
         case move(UUID?)
         case trash(Bool)
+        case deletePermanently
     }
 
     struct BatchResult {
@@ -128,6 +129,8 @@ final class LibraryStore {
         for id in ids {
             do {
                 switch change {
+                case .deletePermanently:
+                    try deleteTrashedDocument(id)
                 case .move(let folderID):
                     try moveDocument(id, to: folderID)
                 case .trash(let trashed):
@@ -159,9 +162,16 @@ final class LibraryStore {
         }
     }
 
-    func delete(_ notebook: Notebook) throws {
-        try FileManager.default.removeItem(at: directory.appending(path: "\(notebook.id.uuidString).json"))
-        notebooks.removeAll { $0.id == notebook.id }
+    private func deleteTrashedDocument(_ id: UUID) throws {
+        guard notebooks.contains(where: { $0.id == id && $0.trashedAt != nil }) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let file = directory.appending(path: "\(id.uuidString).json")
+        guard try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        try FileManager.default.removeItem(at: file)
+        notebooks.removeAll { $0.id == id }
     }
 
     func pdf(for notebook: Notebook) -> PDFDocument? {

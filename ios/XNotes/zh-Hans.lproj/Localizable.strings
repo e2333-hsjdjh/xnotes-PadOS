@@ -23,7 +23,6 @@
 "No documents" = "暂无文档";
 "Restore" = "恢复";
 "Delete permanently" = "永久删除";
-"Permanently delete this document?" = "永久删除此文档？";
 "Move to Trash" = "移到回收站";
 "Library" = "文档库";
 "Library options" = "文档库选项";
@@ -143,3 +142,5 @@
 "Export selected documents as PDF" = "将所选文档导出为 PDF";
 "Selected documents" = "所选文档";
 "Move folder" = "移动文件夹";
+"Permanently delete %lld documents?" = "永久删除 %lld 份文档？";
+"Delete selected permanently" = "永久删除所选文档";
