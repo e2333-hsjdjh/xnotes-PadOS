@@ -11,8 +11,7 @@ struct LibraryView: View {
     @State private var export = ExportFile()
     @State private var exportType: UTType = .xnotesArchive
     @State private var exportTitle = ""
-    @State private var primaryID: UUID?
-    @State private var secondaryID: UUID?
+    @State private var panes: [DocumentPane] = []
     @State private var renaming: Notebook?
     @State private var deleting: Notebook?
     @State private var title = ""
@@ -27,15 +26,13 @@ struct LibraryView: View {
 
     var body: some View {
         Group {
-            if let primaryID, let notebook = openNotebook(primaryID) {
+            if !panes.isEmpty {
                 HStack(spacing: 0) {
-                    editor(notebook) {
-                        self.primaryID = secondaryID
-                        secondaryID = nil
-                    }
-                    if let secondaryID, let other = openNotebook(secondaryID) {
-                        Divider()
-                        editor(other) { self.secondaryID = nil }
+                    ForEach(panes) { pane in
+                        if let notebook = openNotebook(pane.documentID) {
+                            if pane.id != panes.first?.id { Divider() }
+                            editor(notebook, in: pane)
+                        }
                     }
                 }
             } else {
@@ -44,8 +41,7 @@ struct LibraryView: View {
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf, .xnotesArchive]) { result in
             perform {
-                primaryID = try library.importFile(result.get())
-                secondaryID = nil
+                open(try library.importFile(result.get()))
             }
         }
         .fileExporter(isPresented: $exporting, document: export, contentType: exportType, defaultFilename: exportTitle) {
@@ -94,7 +90,7 @@ struct LibraryView: View {
                 }
                 ForEach(documents) { notebook in
                     Button {
-                        if !showTrash { primaryID = notebook.id }
+                        if !showTrash { open(notebook.id) }
                     } label: {
                         Label(notebook.title, systemImage: notebook.kind.symbol)
                     }
@@ -143,13 +139,34 @@ struct LibraryView: View {
         }
     }
 
-    private func editor(_ notebook: Notebook, close: @escaping () -> Void) -> some View {
-        NotebookEditor(notebook: notebook, library: library, close: close) {
-            ForEach(library.notebooks.filter { $0.trashedAt == nil && $0.id != primaryID }) { other in
-                Button(other.title) { secondaryID = other.id }
+    private func editor(_ notebook: Notebook, in pane: DocumentPane) -> some View {
+        let shared = panes.first(where: { $0.documentID == notebook.id })?.id != pane.id
+        return NotebookEditor(notebook: notebook, library: library, readOnly: shared, close: {
+            panes.removeAll { $0.id == pane.id }
+        }) {
+            if notebook.kind != .canvas {
+                Button("Open another view", systemImage: "rectangle.on.rectangle") {
+                    openBeside(pane, documentID: notebook.id)
+                }
+            }
+            ForEach(library.notebooks.filter { $0.trashedAt == nil && $0.id != notebook.id }) { other in
+                Button(other.title) { openBeside(pane, documentID: other.id) }
             }
         }
         .id(notebook.id)
+    }
+
+    private func open(_ documentID: UUID) {
+        panes = [DocumentPane(documentID: documentID)]
+    }
+
+    private func openBeside(_ pane: DocumentPane, documentID: UUID) {
+        guard panes.contains(where: { $0.id == pane.id }) else { return }
+        if let index = panes.firstIndex(where: { $0.id != pane.id }) {
+            panes[index].documentID = documentID
+        } else {
+            panes.append(DocumentPane(documentID: documentID))
+        }
     }
 
     private func openNotebook(_ id: UUID) -> Notebook? {
@@ -160,7 +177,7 @@ struct LibraryView: View {
         let notebook = Notebook(title: kind == .canvas ? String(localized: "Untitled canvas") : String(localized: "Untitled notebook"), kind: kind)
         perform {
             try library.save(notebook)
-            primaryID = notebook.id
+            open(notebook.id)
         }
     }
 
@@ -191,6 +208,11 @@ struct LibraryView: View {
     private func perform(_ operation: () throws -> Void) {
         do { try operation() } catch { library.issue = error.localizedDescription }
     }
+}
+
+private struct DocumentPane: Identifiable {
+    let id = UUID()
+    var documentID: UUID
 }
 
 private struct ExportFile: FileDocument {

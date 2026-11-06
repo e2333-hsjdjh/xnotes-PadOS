@@ -19,7 +19,7 @@
 | `InfiniteEditor`、`InfiniteToolbar` | 2048 × 2048 可滚动书写区域 | 无限坐标、缩放、路径点、导航缩略图和画布专用工具 |
 | `PdfResources`、`PdfMarkups`、`BundlePdf` | PDF 导入、分页显示、原文查找、目录跳转、笔迹叠加、按 SHA-256 共享原件、包含原件的 iOS 备份、导出含可见笔迹与页面内容的 PDF | 原生文字标注、匹配位置高亮、批处理、合并、PDF 链接与交互对象保留、原件恢复与回收、扫描 PDF 性能验证 |
 | `LayersPanel` | 侧栏、每页图层、选层、增删、命名、显隐、锁定、菜单排序 | 缩略图、拖动排序、图层操作撤销、跨图层移动、切换页面后的历史 |
-| `SplitDocumentPicker`、`PaneHomeState` | 两份文档并排 | 同文档双视图、窗格首页、共享工具栏和焦点路由、布局恢复 |
+| `SplitDocumentPicker`、`PaneHomeState` | 两份文档并排、同一分页笔记或 PDF 的只读副视图 | 同文档编辑焦点接管、窗格首页、共享工具栏和焦点路由、布局恢复 |
 | `AskAi`、`AiSessions`、`PreferencesPane` | 外观切换 | AI 会话、供应商、Keychain、模型工具、截图和 PDF 附件，其他设置及帮助页面 |
 | `pen/`、`PenShortcutSettings` | PencilKit 输入、可切换仅 Apple Pencil | iPad 可用手势映射、真机压感、延迟、防误触与取消验收 |
 | `DocumentCodec`、`CanvasCodec`、`BundleIdentity` | iOS 版本化 `.xnotes` 备份 | Android `.xnote` 格式互通、旧版迁移及身份恢复 |

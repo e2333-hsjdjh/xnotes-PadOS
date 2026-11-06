@@ -6,6 +6,7 @@ import SwiftUI
 struct NotebookEditor<SplitChoices: View>: View {
     let notebook: Notebook
     let library: LibraryStore
+    let readOnly: Bool
     let close: () -> Void
     @ViewBuilder let splitChoices: () -> SplitChoices
 
@@ -48,10 +49,12 @@ struct NotebookEditor<SplitChoices: View>: View {
         VStack(spacing: 0) {
             header
             Divider()
-            tools
-            Divider()
+            if !readOnly {
+                tools
+                Divider()
+            }
             HStack(spacing: 0) {
-                if showLayers {
+                if showLayers && !readOnly {
                     layerPanel
                     Divider()
                 }
@@ -72,6 +75,15 @@ struct NotebookEditor<SplitChoices: View>: View {
             loadBackground()
         }
         .onDisappear { imageImport?.cancel() }
+        .onChange(of: readOnly) {
+            guard readOnly else { return }
+            imageImport?.cancel()
+            imageSelection = nil
+            editingImages = false
+            editingText = false
+            showPaper = false
+            layerToRename = nil
+        }
         .onChange(of: imageSelection) {
             if let imageSelection { importImage(imageSelection) }
         }
@@ -84,7 +96,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             PageNavigator(
                 pages: notebook.pages,
                 current: page.id,
-                editable: notebook.kind == .notebook,
+                editable: !readOnly && notebook.kind == .notebook,
                 pdf: pdf,
                 open: { selectedPageID = $0 },
                 add: addPage,
@@ -134,7 +146,10 @@ struct NotebookEditor<SplitChoices: View>: View {
     private var header: some View {
         HStack {
             icon("Close document", "chevron.backward", action: close)
-            Text(notebook.title).font(.headline).lineLimit(1)
+            VStack(alignment: .leading) {
+                Text(notebook.title).font(.headline).lineLimit(1)
+                if readOnly { Text("Read-only view").font(.caption).foregroundStyle(.secondary) }
+            }
             Spacer()
             Menu("Split view", systemImage: "rectangle.split.2x1") {
                 splitChoices()
@@ -197,7 +212,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             } else if notebook.kind == .pdf {
                 Text("Original PDF unavailable").foregroundStyle(.black).padding()
             }
-            if !editingImages {
+            if !editingImages || readOnly {
                 ForEach(page.images ?? []) { image in
                     PageImageView(image: image, editing: false, paperSize: paperSize, move: { _ in }, remove: {})
                 }
@@ -207,7 +222,7 @@ struct NotebookEditor<SplitChoices: View>: View {
                 .padding(24)
                 .allowsHitTesting(false)
             ForEach(page.layers.filter(\.visible)) { layer in
-                if layer.id == activeLayer && !layer.locked {
+                if !readOnly && layer.id == activeLayer && !layer.locked {
                     InkSurface(
                         ink: layer.ink, tool: tool, color: darkPaper ? .white : .black,
                         width: width, pencilOnly: pencilOnly,
@@ -221,7 +236,7 @@ struct NotebookEditor<SplitChoices: View>: View {
                         .allowsHitTesting(false)
                 }
             }
-            if editingImages {
+            if editingImages && !readOnly {
                 ForEach(page.images ?? []) { image in
                     PageImageView(image: image, editing: true, paperSize: paperSize) { frame in
                         updatePage(on: pageID) { page in
@@ -249,7 +264,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             .accessibilityLabel(Text("Pages"))
             icon("Next page", "chevron.right") { selectedPageID = notebook.pages[pageIndex + 1].id }
                 .disabled(pageIndex + 1 == notebook.pages.count)
-            if notebook.kind == .notebook {
+            if !readOnly && notebook.kind == .notebook {
                 icon("Add page", "plus", action: addPage)
             }
         }
