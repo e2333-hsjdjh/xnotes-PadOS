@@ -5,6 +5,7 @@ enum NotebookPDFExport {
     struct Input {
         let notebook: Notebook
         let source: PDFDocument?
+        var darkCanvas = false
         var selectedPages: Set<UUID>? = nil
     }
 
@@ -12,6 +13,8 @@ enum NotebookPDFExport {
         let note: NotePage
         let original: PDFPage?
         let bounds: CGRect
+        var crop: CGRect? = nil
+        var dark = false
     }
 
     static func data(for notebook: Notebook, source: PDFDocument?, selecting ids: Set<UUID>? = nil) throws -> Data {
@@ -26,9 +29,9 @@ enum NotebookPDFExport {
         let data = renderer.pdfData { context in
             do {
                 for page in pages {
-                    context.beginPage(withBounds: page.bounds, pageInfo: [:])
+                    context.beginPage(withBounds: CGRect(origin: .zero, size: page.crop?.size ?? page.bounds.size), pageInfo: [:])
                     try NotebookPageDrawing.draw(page.note, original: page.original, in: page.bounds,
-                                                 with: context.cgContext, inkScale: 2)
+                                                 with: context.cgContext, inkScale: 2, crop: page.crop, dark: page.dark)
                 }
             } catch {
                 renderError = error
@@ -41,8 +44,7 @@ enum NotebookPDFExport {
     private static func exportPages(_ input: Input) throws -> [Page] {
         let notebook = input.notebook
         let ids = input.selectedPages
-        guard notebook.kind != .canvas,
-              notebook.kind != .pdf || input.source?.pageCount == notebook.pages.count else {
+        guard notebook.kind != .pdf || input.source?.pageCount == notebook.pages.count else {
             throw CocoaError(.fileReadCorruptFile)
         }
 
@@ -51,6 +53,11 @@ enum NotebookPDFExport {
             throw CocoaError(.fileReadNoSuchFile)
         }
         return try selected.map { index, page in
+            if notebook.kind == .canvas {
+                return Page(note: page, original: nil,
+                            bounds: CGRect(origin: .zero, size: NotebookPageDrawing.canvasSize),
+                            crop: try NotebookPageDrawing.canvasCrop(page), dark: input.darkCanvas)
+            }
             let original = notebook.kind == .pdf ? input.source?.page(at: index) : nil
             if notebook.kind == .pdf && original == nil { throw CocoaError(.fileReadCorruptFile) }
             let size = try original.map(PDFPageGeometry.displaySize) ?? (page.paperSize ?? .letter).dimensions

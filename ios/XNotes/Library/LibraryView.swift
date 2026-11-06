@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct LibraryView: View {
+    @Environment(\.colorScheme) private var scheme
     @Bindable var library: LibraryStore
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("librarySort") private var sort = LibrarySort.modified
@@ -214,8 +215,7 @@ struct LibraryView: View {
                                 exportPDFs(selectedForPDF)
                             }
                             .disabled(selectedDocuments.isEmpty ||
-                                      selectedForPDF.count != selectedDocuments.count ||
-                                      selectedForPDF.contains { $0.kind == .canvas })
+                                      selectedForPDF.count != selectedDocuments.count)
                             Button("Trash selected documents", systemImage: "trash", role: .destructive) {
                                 applyBatch(.trash(true), to: selectedDocuments)
                             }
@@ -295,9 +295,7 @@ struct LibraryView: View {
                 showFolders = true
             }
             Button("Export backup", systemImage: "square.and.arrow.up") { exportNotebook(notebook) }
-            if notebook.kind != .canvas {
-                Button("Export PDF", systemImage: "doc.richtext") { exportPDF(notebook) }
-            }
+            Button("Export PDF", systemImage: "doc.richtext") { exportPDF(notebook) }
             Button("Move to Trash", systemImage: "trash", role: .destructive) { setTrashed(notebook, true) }
         }
     }
@@ -409,7 +407,7 @@ struct LibraryView: View {
     private func exportPDFs(_ notebooks: [Notebook]) {
         perform {
             let inputs = notebooks.map { notebook in
-                NotebookPDFExport.Input(notebook: notebook, source: library.pdf(for: notebook))
+                NotebookPDFExport.Input(notebook: notebook, source: library.pdf(for: notebook), darkCanvas: scheme == .dark)
             }
             export = ExportFile(data: try NotebookPDFExport.data(for: inputs))
             exportType = .pdf

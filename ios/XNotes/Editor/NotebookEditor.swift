@@ -50,7 +50,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     private var darkPaper: Bool { scheme == .dark && notebook.kind != .pdf }
     private var paperSize: CGSize {
         if let pdfImage { return pdfImage.size }
-        if notebook.kind == .canvas { return CGSize(width: 2048, height: 2048) }
+        if notebook.kind == .canvas { return NotebookPageDrawing.canvasSize }
         return (page.paperSize ?? .letter).dimensions
     }
 

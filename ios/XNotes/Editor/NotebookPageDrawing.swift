@@ -3,19 +3,51 @@ import PencilKit
 import UIKit
 
 enum NotebookPageDrawing {
+    static let canvasSize = CGSize(width: 2048, height: 2048)
+    private static let textInset: CGFloat = 24
+    private static let textOptions: NSStringDrawingOptions = [.usesLineFragmentOrigin, .usesFontLeading]
+
+    static func canvasCrop(_ page: NotePage) throws -> CGRect {
+        let paper = CGRect(origin: .zero, size: canvasSize)
+        var content = CGRect.null
+        for image in page.images ?? [] {
+            content = content.union(image.frame.intersection(paper))
+        }
+        if !page.text.isEmpty {
+            let frame = paper.insetBy(dx: textInset, dy: textInset)
+            let measured = (page.text as NSString).boundingRect(
+                with: frame.size, options: textOptions, attributes: textAttributes(dark: false), context: nil
+            )
+            if !measured.isEmpty {
+                let placed = measured.offsetBy(dx: frame.minX, dy: frame.minY)
+                content = content.union(placed.intersection(paper))
+            }
+        }
+        for layer in page.layers where layer.visible && !layer.ink.isEmpty {
+            let drawing = try PKDrawing(data: layer.ink)
+            if !drawing.strokes.isEmpty {
+                content = content.union(drawing.bounds.intersection(paper))
+            }
+        }
+        guard !content.isEmpty else { return paper }
+        return content.insetBy(dx: -16, dy: -16).integral.intersection(paper)
+    }
+
     static func draw(_ page: NotePage, original: PDFPage?, in bounds: CGRect,
-                     with graphics: CGContext, inkScale: CGFloat) throws {
+                     with graphics: CGContext, inkScale: CGFloat, crop: CGRect? = nil, dark: Bool = false) throws {
         graphics.saveGState()
         defer { graphics.restoreGState() }
-        graphics.clip(to: bounds)
-        graphics.setFillColor(UIColor.white.cgColor)
-        graphics.fill(bounds)
+        let visible = crop ?? bounds
+        graphics.clip(to: CGRect(origin: .zero, size: visible.size))
+        graphics.translateBy(x: -visible.minX, y: -visible.minY)
+        graphics.setFillColor((dark ? UIColor.black : .white).cgColor)
+        graphics.fill(visible)
         if let original {
             try draw(original, in: bounds, with: graphics)
         } else if let pattern = page.paperPattern {
             pattern.draw(in: graphics, size: bounds.size, dark: false)
         }
-        try drawContents(page, in: bounds, inkScale: inkScale)
+        try drawContents(page, in: bounds, visible: visible, inkScale: inkScale, dark: dark)
     }
 
     private static func draw(_ page: PDFPage, in bounds: CGRect, with graphics: CGContext) throws {
@@ -29,23 +61,28 @@ enum NotebookPageDrawing {
         graphics.drawPDFPage(reference)
     }
 
-    private static func drawContents(_ page: NotePage, in bounds: CGRect, inkScale: CGFloat) throws {
-        for image in page.images ?? [] {
+    private static func textAttributes(dark: Bool) -> [NSAttributedString.Key: Any] {
+        [.font: UIFont.preferredFont(forTextStyle: .body), .foregroundColor: dark ? UIColor.white : .black]
+    }
+
+    private static func drawContents(_ page: NotePage, in bounds: CGRect, visible: CGRect,
+                                     inkScale: CGFloat, dark: Bool) throws {
+        for image in page.images ?? [] where image.frame.intersects(visible) {
             guard let bitmap = UIImage(data: image.data) else { throw CocoaError(.fileReadCorruptFile) }
             bitmap.draw(in: image.frame)
         }
 
-        let textBounds = bounds.insetBy(dx: 24, dy: 24)
+        let textBounds = bounds.insetBy(dx: textInset, dy: textInset)
         if !page.text.isEmpty, textBounds.width > 0, textBounds.height > 0 {
             (page.text as NSString).draw(with: textBounds,
-                options: [.usesLineFragmentOrigin, .usesFontLeading],
-                attributes: [.font: UIFont.preferredFont(forTextStyle: .body), .foregroundColor: UIColor.black],
+                options: textOptions,
+                attributes: textAttributes(dark: dark),
                 context: nil)
         }
 
         for layer in page.layers where layer.visible && !layer.ink.isEmpty {
             let drawing = try PKDrawing(data: layer.ink)
-            let visibleBounds = drawing.bounds.intersection(bounds).integral
+            let visibleBounds = drawing.bounds.intersection(visible).integral
             if !visibleBounds.isEmpty {
                 UITraitCollection(userInterfaceStyle: .light).performAsCurrent {
                     drawing.image(from: visibleBounds, scale: inkScale).draw(in: visibleBounds)
