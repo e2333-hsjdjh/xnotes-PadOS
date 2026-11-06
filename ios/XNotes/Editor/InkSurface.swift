@@ -10,7 +10,7 @@ enum InkTool: String, CaseIterable {
     func pencilTool(color: UIColor, width: CGFloat) -> any PKTool {
         switch self {
         case .pen: PKInkingTool(.pen, color: color, width: width)
-        case .marker: PKInkingTool(.marker, color: color, width: width * 3)
+        case .marker: PKInkingTool(.marker, color: color, width: width)
         case .eraser: PKEraserTool(.vector)
         case .lasso: PKLassoTool()
         }
@@ -31,6 +31,7 @@ struct InkSurface: UIViewRepresentable {
     let tool: InkTool
     let color: UIColor
     let width: CGFloat
+    let darkPaper: Bool
     let pencilOnly: Bool
     let changed: (Data, UUID?) -> Bool
 
@@ -41,7 +42,7 @@ struct InkSurface: UIViewRepresentable {
         view.backgroundColor = .clear
         view.isOpaque = false
         view.isScrollEnabled = false
-        view.overrideUserInterfaceStyle = .light
+        view.overrideUserInterfaceStyle = darkPaper ? .dark : .light
         context.coordinator.load(ink, into: view)
         view.delegate = context.coordinator
         return view
@@ -49,6 +50,7 @@ struct InkSurface: UIViewRepresentable {
 
     func updateUIView(_ view: PKCanvasView, context: Context) {
         context.coordinator.changed = changed
+        view.overrideUserInterfaceStyle = darkPaper ? .dark : .light
         view.drawingPolicy = pencilOnly ? .pencilOnly : .anyInput
         view.tool = tool.pencilTool(color: color, width: width)
         if context.coordinator.loaded != ink {

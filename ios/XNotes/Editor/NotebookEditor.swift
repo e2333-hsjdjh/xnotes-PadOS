@@ -19,8 +19,11 @@ struct NotebookEditor<SplitChoices: View>: View {
     @State private var showPaperSize = false
     @State private var selectedLayer: UUID?
     @State private var tool: InkTool = .pen
-    @State private var width = 3.0
-    @State private var pencilOnly = false
+    @AppStorage("penWidth") private var penWidth = 3.0
+    @AppStorage("markerWidth") private var markerWidth = 9.0
+    @AppStorage("penColor") private var penColor = InkColor.black
+    @AppStorage("markerColor") private var markerColor = InkColor.yellow
+    @AppStorage("pencilOnly") private var pencilOnly = false
     @State private var showLayers = false
     @State private var layerEditMode: EditMode = .inactive
     @AppStorage("layerPreviewMode") private var layerPreviewMode = LayerPreviewMode.content
@@ -241,10 +244,11 @@ struct NotebookEditor<SplitChoices: View>: View {
                 }
                 icon("Layers", "square.3.layers.3d", selected: showLayers) { showLayers.toggle() }
                 Menu("Ink settings", systemImage: "slider.horizontal.3") {
-                    Picker("Width", selection: $width) {
-                        Text("Thin").tag(1.5)
-                        Text("Medium").tag(3.0)
-                        Text("Thick").tag(7.0)
+                    Menu("Pen") {
+                        inkSettings(color: $penColor, width: $penWidth, widths: [1.5, 3, 7])
+                    }
+                    Menu("Highlighter") {
+                        inkSettings(color: $markerColor, width: $markerWidth, widths: [5, 9, 18])
                     }
                     Toggle("Apple Pencil only", isOn: $pencilOnly)
                 }
@@ -253,6 +257,19 @@ struct NotebookEditor<SplitChoices: View>: View {
             .padding(.horizontal, 8)
         }
         .scrollIndicators(.hidden)
+    }
+
+    @ViewBuilder private func inkSettings(color: Binding<InkColor>, width: Binding<Double>, widths: [Double]) -> some View {
+        Picker("Ink color", selection: color) {
+            ForEach(InkColor.allCases, id: \.self) { option in
+                Text(option.label).tag(option)
+            }
+        }
+        Picker("Width", selection: width) {
+            Text("Thin").tag(widths[0])
+            Text("Medium").tag(widths[1])
+            Text("Thick").tag(widths[2])
+        }
     }
 
     private var paper: some View {
@@ -279,8 +296,9 @@ struct NotebookEditor<SplitChoices: View>: View {
             ForEach(page.layers.filter(\.visible)) { layer in
                 if canEdit && layer.id == activeLayer && !layer.locked {
                     InkSurface(
-                        ink: layer.ink, tool: tool, color: darkPaper ? .white : .black,
-                        width: width, pencilOnly: pencilOnly,
+                        ink: layer.ink, tool: tool, color: (tool == .marker ? markerColor : penColor).color,
+                        width: tool == .marker ? markerWidth : penWidth,
+                        darkPaper: darkPaper, pencilOnly: pencilOnly,
                         changed: { data, gesture in
                             updatePage(on: pageID, gesture: gesture) { page in
                                 guard let index = page.layers.firstIndex(where: { $0.id == layer.id }),
@@ -292,7 +310,7 @@ struct NotebookEditor<SplitChoices: View>: View {
                     .id(layer.id)
                     .allowsHitTesting(!editingImages)
                 } else {
-                    LayerImage(ink: layer.ink)
+                    LayerImage(ink: layer.ink, darkPaper: darkPaper)
                         .allowsHitTesting(false)
                 }
             }
@@ -569,11 +587,20 @@ struct NotebookEditor<SplitChoices: View>: View {
 
 private struct LayerImage: View {
     let ink: Data
+    let darkPaper: Bool
+
+    private func render(_ drawing: PKDrawing, bounds: CGRect) -> UIImage {
+        var image = UIImage()
+        UITraitCollection(userInterfaceStyle: darkPaper ? .dark : .light).performAsCurrent {
+            image = drawing.image(from: bounds, scale: 2)
+        }
+        return image
+    }
 
     var body: some View {
         if let drawing = try? PKDrawing(data: ink), !drawing.strokes.isEmpty {
             let bounds = drawing.bounds
-            Image(uiImage: drawing.image(from: bounds, scale: 2))
+            Image(uiImage: render(drawing, bounds: bounds))
                 .position(x: bounds.midX, y: bounds.midY)
         }
     }

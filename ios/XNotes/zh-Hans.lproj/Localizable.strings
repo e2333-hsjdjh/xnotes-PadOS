@@ -151,3 +151,10 @@
 "Until manually emptied" = "保留至手动清理";
 "Change trash retention?" = "更改回收站保留期限？";
 "Documents already past the new retention limit will be permanently deleted." = "超过新保留期限的文档将被永久删除。";
+"Ink color" = "笔迹颜色";
+"Black ink" = "黑色";
+"Red ink" = "红色";
+"Blue ink" = "蓝色";
+"Green ink" = "绿色";
+"Yellow ink" = "黄色";
+"Violet ink" = "紫色";

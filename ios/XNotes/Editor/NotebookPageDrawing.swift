@@ -84,7 +84,7 @@ enum NotebookPageDrawing {
             let drawing = try PKDrawing(data: layer.ink)
             let visibleBounds = drawing.bounds.intersection(visible).integral
             if !visibleBounds.isEmpty {
-                UITraitCollection(userInterfaceStyle: .light).performAsCurrent {
+                UITraitCollection(userInterfaceStyle: dark ? .dark : .light).performAsCurrent {
                     drawing.image(from: visibleBounds, scale: inkScale).draw(in: visibleBounds)
                 }
             }
