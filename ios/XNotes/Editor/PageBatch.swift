@@ -30,22 +30,34 @@ enum PageBatch {
         for page in pages {
             result.append(page)
             guard ids.contains(page.id) else { continue }
-            var copy = page
-            copy.id = UUID()
-            copy.bookmarks = nil
-            if let images = copy.images {
-                copy.images = images.map {
-                    var image = $0
-                    image.id = UUID()
-                    return image
-                }
-            }
-            for index in copy.layers.indices { copy.layers[index].id = UUID() }
+            let copy = makeCopy(of: page)
             firstCopy = firstCopy ?? copy.id
             result.append(copy)
         }
         guard let firstCopy else { return nil }
         return (result, firstCopy)
+    }
+
+    static func makeCopy(of page: NotePage) -> NotePage {
+        var copy = page
+        copy.id = UUID()
+        copy.bookmarks = nil
+        if let images = copy.images {
+            copy.images = images.map {
+                var image = $0
+                image.id = UUID()
+                return image
+            }
+        }
+        for index in copy.layers.indices { copy.layers[index].id = UUID() }
+        if let marks = copy.pdfTextMarkups {
+            copy.pdfTextMarkups = marks.map {
+                var mark = $0
+                mark.id = UUID()
+                return mark
+            }
+        }
+        return copy
     }
 
     static func remove(_ ids: Set<UUID>, from pages: [NotePage], current: UUID) -> (pages: [NotePage], current: UUID)? {

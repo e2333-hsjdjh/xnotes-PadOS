@@ -209,31 +209,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             saveViewState()
         }
         .sheet(isPresented: $showPages, onDismiss: scrollToPDFMatch) {
-            PageNavigator(
-                pages: notebook.pages,
-                current: page.id,
-                editable: !readOnly && notebook.kind == .notebook,
-                pdf: pdf,
-                pagePDFs: pagePDFs,
-                documentTitle: notebook.title,
-                bookmarkEditing: canEdit,
-                editBookmark: editBookmark,
-                exportImages: exportPageImages,
-                exportPages: { ids in
-                    guard let latestNotebook else { throw CocoaError(.fileReadNoSuchFile) }
-                    return try NotebookPDFExport.data(for: latestNotebook, source: pdf, pagePDFs: pagePDFs, selecting: ids)
-                },
-                open: { id in
-                    clearPDFMatches()
-                    selectedPageID = id
-                },
-                openPDFMatch: showPDFMatches,
-                add: addPage,
-                duplicate: duplicatePages,
-                delete: deletePages,
-                editPaper: editPaper,
-                move: movePages
-            )
+            pageNavigator
         }
         .sheet(item: $pdfInsertRequest) { request in
             PDFInsertPicker(document: request.source.document) { indices in
@@ -303,6 +279,37 @@ struct NotebookEditor<SplitChoices: View>: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+    }
+
+    private var pageNavigator: PageNavigator {
+        PageNavigator(
+            pages: notebook.pages,
+            current: page.id,
+            editable: !readOnly && notebook.kind == .notebook,
+            pdf: pdf,
+            pagePDFs: pagePDFs,
+            documentTitle: notebook.title,
+            bookmarkEditing: canEdit,
+            editBookmark: editBookmark,
+            exportImages: exportPageImages,
+            exportPages: { ids in
+                guard let latestNotebook else { throw CocoaError(.fileReadNoSuchFile) }
+                return try NotebookPDFExport.data(for: latestNotebook, source: pdf, pagePDFs: pagePDFs, selecting: ids)
+            },
+            open: { id in
+                clearPDFMatches()
+                selectedPageID = id
+            },
+            openPDFMatch: showPDFMatches,
+            add: addPage,
+            copyPages: copyPages,
+            pasteCount: canEdit ? (library.pageClipboard?.pages.count ?? 0) : 0,
+            pastePages: pastePages,
+            duplicate: duplicatePages,
+            delete: deletePages,
+            editPaper: editPaper,
+            move: movePages
+        )
     }
 
     private var header: some View {
@@ -514,6 +521,28 @@ struct NotebookEditor<SplitChoices: View>: View {
         newPage.paperSize = updated.pages[index].paperSize
         updated.pages.insert(newPage, at: index + 1)
         if save(updated) { selectedPageID = newPage.id }
+    }
+
+    private func copyPages(_ ids: Set<UUID>) -> Bool {
+        do {
+            try library.copyPages(from: notebook.id, selecting: ids)
+            return true
+        } catch {
+            library.issue = error.localizedDescription
+            return false
+        }
+    }
+
+    private func pastePages() {
+        guard canEdit, notebook.kind == .notebook, let clipboard = library.pageClipboard,
+              var updated = latestNotebook,
+              let index = updated.pages.firstIndex(where: { $0.id == page.id }) else { return }
+        let copies = clipboard.pages.map(PageBatch.makeCopy)
+        updated.pages.insert(contentsOf: copies, at: index + 1)
+        if save(updated) {
+            pagePDFs.merge(clipboard.sources) { _, clipboard in clipboard }
+            selectedPageID = copies.first?.id
+        }
     }
 
     private func duplicatePages(_ ids: Set<UUID>) -> Bool {

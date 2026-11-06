@@ -189,3 +189,6 @@
 "Insert PDF pages" = "插入 PDF 页面";
 "Clear page selection" = "清除页面选择";
 "Insert %lld pages" = "插入 %lld 页";
+"Copy page" = "拷贝页面";
+"Copy selected pages" = "拷贝所选页面";
+"Paste %lld pages" = "粘贴 %lld 页";

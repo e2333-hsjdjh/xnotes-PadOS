@@ -8,6 +8,12 @@ import UniformTypeIdentifiers
 @MainActor @Observable
 final class LibraryStore {
     private(set) var notebooks: [Notebook] = []
+    struct PageClipboard {
+        let pages: [NotePage]
+        let sources: [String: PDFDocument]
+    }
+
+    private(set) var pageClipboard: PageClipboard?
     private var noteBytes: [UUID: Int] = [:]
     private var originalBytes: [String: Int] = [:]
     private(set) var folders: [LibraryFolder] = []
@@ -213,6 +219,27 @@ final class LibraryStore {
               document.pageCount == notebook.pages.count else { return nil }
         pdfResources.track(document, digest: digest)
         return document
+    }
+
+    func copyPages(from id: UUID, selecting ids: Set<UUID>) throws {
+        guard let notebook = notebooks.first(where: { $0.id == id && $0.trashedAt == nil }),
+              notebook.kind != .canvas, !ids.isEmpty else { throw CocoaError(.fileReadNoSuchFile) }
+        let pages = notebook.pages.enumerated().filter { ids.contains($0.element.id) }.map { index, original in
+            var page = original
+            if let digest = notebook.pdfDigest {
+                page.pdfBackground = PDFPageReference(digest: digest, index: index)
+            }
+            return page
+        }
+        guard pages.count == ids.count else { throw CocoaError(.fileReadNoSuchFile) }
+        var sources: [String: PDFDocument] = [:]
+        for reference in pages.compactMap(\.pdfBackground) {
+            if sources[reference.digest] == nil { sources[reference.digest] = pagePDF(for: reference.digest) }
+            guard sources[reference.digest]?.page(at: reference.index) != nil else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+        }
+        pageClipboard = PageClipboard(pages: pages, sources: sources)
     }
 
     func pagePDF(for digest: String) -> PDFDocument? {

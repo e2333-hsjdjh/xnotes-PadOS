@@ -16,6 +16,9 @@ struct PageNavigator: View {
     let open: (UUID) -> Void
     let openPDFMatch: (UUID, String) -> Void
     let add: () -> Void
+    let copyPages: (Set<UUID>) -> Bool
+    let pasteCount: Int
+    let pastePages: () -> Void
     let duplicate: (Set<UUID>) -> Bool
     let delete: (Set<UUID>) -> Bool
     let editPaper: (PagePaperEdit, Set<UUID>) -> Bool
@@ -124,7 +127,12 @@ struct PageNavigator: View {
                             Button(editMode.isEditing ? "Done reordering" : "Reorder pages") {
                                 editMode = editMode.isEditing ? .inactive : .active
                             }
-                            Button("Add page", systemImage: "plus", action: add)
+                            Menu("Add page", systemImage: "plus") {
+                                Button("Add page", action: add)
+                                if pasteCount > 0 {
+                                    Button("Paste \(pasteCount) pages", action: pastePages)
+                                }
+                            }
                         }
                     }
                 }
@@ -135,6 +143,10 @@ struct PageNavigator: View {
                         Menu("Export selected pages", systemImage: "square.and.arrow.up") {
                             Button("Export selected pages as PDF") { prepareExport(asImages: false) }
                             Button("Export selected pages as PNG") { prepareExport(asImages: true) }
+                        }
+                        .disabled(selected.isEmpty)
+                        Button("Copy selected pages", systemImage: "doc.on.doc") {
+                            if copyPages(selected) { endSelection() }
                         }
                         .disabled(selected.isEmpty)
                         if editable {
@@ -309,6 +321,9 @@ struct PageNavigator: View {
         }
         .accessibilityAddTraits(selecting && selected.contains(page.id) ? .isSelected : [])
         .contextMenu {
+            if !selecting {
+                Button("Copy page", systemImage: "doc.on.doc") { _ = copyPages([page.id]) }
+            }
             if editable && !selecting {
                 Button("Duplicate page", systemImage: "plus.square.on.square") { _ = duplicate([page.id]) }
                 Button("Delete page", systemImage: "trash", role: .destructive) { deleting = [page.id] }
