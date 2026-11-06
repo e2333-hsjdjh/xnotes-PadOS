@@ -12,6 +12,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     @Environment(\.colorScheme) private var scheme
     @State private var selectedPageID: UUID?
     @State private var showPages = false
+    @State private var showPaper = false
     @State private var selectedLayer: UUID?
     @State private var tool: InkTool = .pen
     @State private var width = 3.0
@@ -92,6 +93,12 @@ struct NotebookEditor<SplitChoices: View>: View {
                 move: movePages
             )
         }
+        .sheet(isPresented: $showPaper) {
+            let targetID = page.id
+            PaperPicker(selection: page.paperPattern ?? .blank) { pattern in
+                updatePage(on: targetID) { $0.paperPattern = pattern == .blank ? nil : pattern }
+            }
+        }
         .sheet(isPresented: $editingText) {
             NavigationStack {
                 TextEditor(text: $text)
@@ -157,6 +164,9 @@ struct NotebookEditor<SplitChoices: View>: View {
                 }
                 icon("Arrange images", "move.3d", selected: editingImages) { editingImages.toggle() }
                     .disabled(!editingImages && page.images?.isEmpty != false)
+                if notebook.kind == .notebook {
+                    icon("Paper template", "rectangle.grid.2x2") { showPaper = true }
+                }
                 icon("Layers", "square.3.layers.3d", selected: showLayers) { showLayers.toggle() }
                 Menu("Ink settings", systemImage: "slider.horizontal.3") {
                     Picker("Width", selection: $width) {
@@ -177,6 +187,11 @@ struct NotebookEditor<SplitChoices: View>: View {
         let pageID = page.id
         return ZStack(alignment: .topLeading) {
             darkPaper ? Color.black : Color.white
+            if let pattern = page.paperPattern, notebook.kind == .notebook {
+                PaperPatternView(pattern: pattern, dark: darkPaper)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
             if let pdfImage {
                 Image(uiImage: pdfImage).resizable().allowsHitTesting(false)
             } else if notebook.kind == .pdf {

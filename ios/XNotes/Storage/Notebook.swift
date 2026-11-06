@@ -48,10 +48,17 @@ struct PageImage: Codable, Identifiable {
     }
 }
 
+enum PaperPattern: String, Codable, CaseIterable, Identifiable {
+    case blank, ruled, grid, dots
+
+    var id: Self { self }
+}
+
 struct NotePage: Codable, Identifiable {
     var id = UUID()
     var text = ""
     var images: [PageImage]?
+    var paperPattern: PaperPattern?
     var layers = [DrawingLayer(name: String(localized: "Layer 1"))]
 }
 

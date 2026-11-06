@@ -28,6 +28,8 @@ enum NotebookPDFExport {
                     graphics.fill(bounds)
                     if let original {
                         try draw(original, in: bounds, with: graphics)
+                    } else if let pattern = page.paperPattern {
+                        pattern.draw(in: graphics, size: bounds.size, dark: false)
                     }
                     try drawContents(page, in: bounds)
                 }
