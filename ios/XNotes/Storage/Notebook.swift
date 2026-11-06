@@ -59,11 +59,17 @@ struct PageBookmark: Codable, Identifiable, Equatable {
     var label: String
 }
 
+struct PDFPageReference: Codable, Equatable {
+    let digest: String
+    let index: Int
+}
+
 struct NotePage: Codable, Identifiable, Equatable {
     var id = UUID()
     var text = ""
     var images: [PageImage]?
     var bookmarks: [PageBookmark]?
+    var pdfBackground: PDFPageReference?
     var pdfTextMarkups: [PDFTextMarkup]?
     var paperPattern: PaperPattern?
     var paperSize: NotebookPaperSize?
@@ -80,10 +86,15 @@ struct Notebook: Codable, Identifiable {
     var folderID: UUID?
     var pages = [NotePage()]
     var pdfDigest: String?
+
+    var pdfDigests: Set<String> {
+        Set(pages.compactMap { $0.pdfBackground?.digest }).union(pdfDigest.map { [$0] } ?? [])
+    }
 }
 
 struct NotebookArchive: Codable {
     let version: Int
     var notebook: Notebook
     var originalPDF: Data?
+    var pagePDFs: [String: Data]? = nil
 }

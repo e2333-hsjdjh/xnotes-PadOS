@@ -564,7 +564,11 @@ struct LibraryView: View {
     private func exportPDFs(_ notebooks: [Notebook]) {
         perform {
             let inputs = notebooks.map { notebook in
-                NotebookPDFExport.Input(notebook: notebook, source: library.pdf(for: notebook), darkCanvas: scheme == .dark)
+                let sources = Set(notebook.pages.compactMap { $0.pdfBackground?.digest }).compactMap { digest in
+                    library.pagePDF(for: digest).map { (digest, $0) }
+                }
+                return NotebookPDFExport.Input(notebook: notebook, source: library.pdf(for: notebook),
+                                               darkCanvas: scheme == .dark, pagePDFs: Dictionary(uniqueKeysWithValues: sources))
             }
             let title = notebooks.count == 1 ? notebooks[0].title : String(localized: "Selected documents")
             export = [ExportFile(data: try NotebookPDFExport.data(for: inputs), filename: pdfFilename(title))]

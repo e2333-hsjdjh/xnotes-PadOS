@@ -6,6 +6,7 @@ enum NotebookPDFExport {
         let notebook: Notebook
         let source: PDFDocument?
         var darkCanvas = false
+        var pagePDFs: [String: PDFDocument] = [:]
         var selectedPages: Set<UUID>? = nil
     }
 
@@ -17,8 +18,8 @@ enum NotebookPDFExport {
         var dark = false
     }
 
-    static func data(for notebook: Notebook, source: PDFDocument?, selecting ids: Set<UUID>? = nil) throws -> Data {
-        try data(for: [Input(notebook: notebook, source: source, selectedPages: ids)])
+    static func data(for notebook: Notebook, source: PDFDocument?, pagePDFs: [String: PDFDocument] = [:], selecting ids: Set<UUID>? = nil) throws -> Data {
+        try data(for: [Input(notebook: notebook, source: source, pagePDFs: pagePDFs, selectedPages: ids)])
     }
 
     static func data(for inputs: [Input]) throws -> Data {
@@ -58,8 +59,9 @@ enum NotebookPDFExport {
                             bounds: CGRect(origin: .zero, size: NotebookPageDrawing.canvasSize),
                             crop: try NotebookPageDrawing.canvasCrop(page), dark: input.darkCanvas)
             }
-            let original = notebook.kind == .pdf ? input.source?.page(at: index) : nil
-            if notebook.kind == .pdf && original == nil { throw CocoaError(.fileReadCorruptFile) }
+            let original = page.pdfBackground.flatMap { input.pagePDFs[$0.digest]?.page(at: $0.index) }
+                ?? (notebook.kind == .pdf ? input.source?.page(at: index) : nil)
+            if (notebook.kind == .pdf || page.pdfBackground != nil) && original == nil { throw CocoaError(.fileReadCorruptFile) }
             let size = try original.map(PDFPageGeometry.displaySize) ?? (page.paperSize ?? .letter).dimensions
             return Page(note: page, original: original, bounds: CGRect(origin: .zero, size: size))
         }

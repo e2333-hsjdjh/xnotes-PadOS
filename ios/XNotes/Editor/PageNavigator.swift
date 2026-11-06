@@ -7,6 +7,7 @@ struct PageNavigator: View {
     let current: UUID
     let editable: Bool
     let pdf: PDFDocument?
+    let pagePDFs: [String: PDFDocument]
     let documentTitle: String
     let bookmarkEditing: Bool
     let editBookmark: (BookmarkEdit, UUID) -> Bool
@@ -277,7 +278,8 @@ struct PageNavigator: View {
             }
         } label: {
             HStack(spacing: 12) {
-                PageThumbnail(page: page, index: index, pdf: pdf)
+                PageThumbnail(page: page, index: page.pdfBackground?.index ?? index,
+                              pdf: page.pdfBackground.flatMap { pagePDFs[$0.digest] } ?? pdf)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading) {
                     Text("Page \(index + 1)")

@@ -53,11 +53,13 @@ struct NotebookEditor<SplitChoices: View>: View {
     @State private var layerName = ""
     private enum FileImport {
         case originalPDF
+        case insertPDF(after: UUID)
         case image(pageID: UUID, size: CGSize)
 
         var contentTypes: [UTType] {
             switch self {
             case .originalPDF: [.pdf, .xnotesArchive]
+            case .insertPDF: [.pdf]
             case .image: [.image]
             }
         }
@@ -67,6 +69,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     @State private var showingFileImporter = false
     @State private var showingPhotoPicker = false
     @State private var pdf: PDFDocument?
+    @State private var pagePDFs: [String: PDFDocument] = [:]
     @State private var pdfImage: UIImage?
     @State private var history = DocumentHistory()
 
@@ -82,7 +85,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     }
     private var viewStateSlot: DocumentViewStateStore.Slot { readOnly ? .secondary : .primary }
     private var canEdit: Bool { !readOnly && (notebook.kind != .pdf || pdf != nil) }
-    private var darkPaper: Bool { scheme == .dark && notebook.kind != .pdf }
+    private var darkPaper: Bool { scheme == .dark && notebook.kind != .pdf && page.pdfBackground == nil }
     private var paperSize: CGSize {
         if let pdfImage { return pdfImage.size }
         if notebook.kind == .canvas { return NotebookPageDrawing.canvasSize }
@@ -138,7 +141,12 @@ struct NotebookEditor<SplitChoices: View>: View {
                 }
                 restoredViewState = true
             }
+            retainPagePDFs()
             reloadPDF()
+        }
+        .onChange(of: notebook.pdfDigests) {
+            retainPagePDFs()
+            loadBackground()
         }
         .onChange(of: zoom) { saveViewState() }
         .onChange(of: library.pdfRestorationRevision) {
@@ -178,13 +186,14 @@ struct NotebookEditor<SplitChoices: View>: View {
                 current: page.id,
                 editable: !readOnly && notebook.kind == .notebook,
                 pdf: pdf,
+                pagePDFs: pagePDFs,
                 documentTitle: notebook.title,
                 bookmarkEditing: canEdit,
                 editBookmark: editBookmark,
                 exportImages: exportPageImages,
                 exportPages: { ids in
                     guard let latestNotebook else { throw CocoaError(.fileReadNoSuchFile) }
-                    return try NotebookPDFExport.data(for: latestNotebook, source: pdf, selecting: ids)
+                    return try NotebookPDFExport.data(for: latestNotebook, source: pdf, pagePDFs: pagePDFs, selecting: ids)
                 },
                 open: { id in
                     clearPDFMatches()
@@ -316,7 +325,12 @@ struct NotebookEditor<SplitChoices: View>: View {
                     .disabled(!editingImages && page.images?.isEmpty != false)
                 if notebook.kind == .notebook {
                     icon("Paper template", "rectangle.grid.2x2") { showPaper = true }
+                        .disabled(page.pdfBackground != nil)
+                    icon("Insert PDF pages", "doc.badge.plus") {
+                        showFileImporter(for: .insertPDF(after: page.id))
+                    }
                     icon("Paper size", "arrow.up.left.and.arrow.down.right") { showPaperSize = true }
+                        .disabled(page.pdfBackground != nil)
                 }
                 if notebook.kind == .pdf {
                     Menu("PDF text markup", systemImage: "character.textbox") {
@@ -365,7 +379,7 @@ struct NotebookEditor<SplitChoices: View>: View {
         let pageID = page.id
         return ZStack(alignment: .topLeading) {
             darkPaper ? Color.black : Color.white
-            if let pattern = page.paperPattern, notebook.kind == .notebook {
+            if let pattern = page.paperPattern, notebook.kind == .notebook, page.pdfBackground == nil {
                 PaperPatternView(pattern: pattern, dark: darkPaper)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
@@ -618,6 +632,15 @@ struct NotebookEditor<SplitChoices: View>: View {
             case .originalPDF:
                 try library.restoreOriginalPDF(for: notebook.id, from: url)
                 reloadPDF()
+            case .insertPDF(let targetID):
+                guard canEdit, notebook.kind == .notebook, var updated = latestNotebook,
+                      let index = updated.pages.firstIndex(where: { $0.id == targetID }) else { return }
+                let inserted = try library.insertedPDFPages(from: url)
+                updated.pages.insert(contentsOf: inserted, at: index + 1)
+                if save(updated) {
+                    retainPagePDFs()
+                    selectedPageID = inserted.first?.id
+                }
             case .image(let targetID, let size):
                 guard canEdit else { return }
                 let image = try PageImageView.prepare(url, for: size)
@@ -657,7 +680,7 @@ struct NotebookEditor<SplitChoices: View>: View {
 
     private func exportPageImages(_ ids: Set<UUID>) throws -> [ExportFile] {
         guard let latestNotebook else { throw CocoaError(.fileReadNoSuchFile) }
-        return try PageImageExport.files(for: latestNotebook, source: pdf, selecting: ids)
+        return try PageImageExport.files(for: latestNotebook, source: pdf, pagePDFs: pagePDFs, selecting: ids)
     }
 
     private func showPDFMatches(_ pageID: UUID, query: String) {
@@ -709,8 +732,17 @@ struct NotebookEditor<SplitChoices: View>: View {
         loadBackground()
     }
 
+    private func retainPagePDFs() {
+        for digest in Set((latestNotebook ?? notebook).pages.compactMap({ $0.pdfBackground?.digest }))
+            where pagePDFs[digest] == nil {
+            pagePDFs[digest] = library.pagePDF(for: digest)
+        }
+    }
+
     private func loadBackground() {
-        guard let page = pdf?.page(at: pageIndex) else {
+        let original = page.pdfBackground.flatMap { pagePDFs[$0.digest]?.page(at: $0.index) }
+            ?? pdf?.page(at: pageIndex)
+        guard let page = original else {
             pdfImage = nil
             return
         }

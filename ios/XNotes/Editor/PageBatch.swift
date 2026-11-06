@@ -17,7 +17,7 @@ enum PagePaperEdit {
 enum PageBatch {
     static func editPaper(_ edit: PagePaperEdit, for ids: Set<UUID>, in pages: [NotePage]) -> [NotePage] {
         pages.map { page in
-            guard ids.contains(page.id) else { return page }
+            guard ids.contains(page.id), page.pdfBackground == nil else { return page }
             var updated = page
             edit.apply(to: &updated)
             return updated

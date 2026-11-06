@@ -42,7 +42,7 @@ final class LibraryStore {
                     unreadableCount += 1
                 }
             }
-            for digest in Set(notebooks.compactMap(\.pdfDigest)) {
+            for digest in Set(notebooks.flatMap(\.pdfDigests)) {
                 originalBytes[digest] = try? pdfURL(digest).resourceValues(forKeys: [.fileSizeKey]).fileSize
             }
             documentScanCompleted = true
@@ -168,8 +168,8 @@ final class LibraryStore {
 
     func save(_ notebook: Notebook) throws {
         var updated = notebook
-        if let digest = updated.pdfDigest,
-           !notebooks.contains(where: { $0.id == updated.id && $0.pdfDigest == digest }) {
+        let previous = notebooks.first { $0.id == updated.id }
+        for digest in updated.pdfDigests.subtracting(previous?.pdfDigests ?? []) {
             try pdfResources.protect(digest)
         }
         updated.modified = .now
@@ -215,10 +215,26 @@ final class LibraryStore {
         return document
     }
 
+    func pagePDF(for digest: String) -> PDFDocument? {
+        guard PDFResourceCollector.isDigest(digest), let document = PDFDocument(url: pdfURL(digest)),
+              !document.isLocked else { return nil }
+        pdfResources.track(document, digest: digest)
+        return document
+    }
+
+    func insertedPDFPages(from url: URL) throws -> [NotePage] {
+        let data = try readFile(url)
+        let pdf = try readablePDF(data)
+        let hash = try preservePDF(data)
+        return (0..<pdf.pageCount).map { index in
+            NotePage(pdfBackground: PDFPageReference(digest: hash, index: index))
+        }
+    }
+
     @discardableResult
     func sweepUnreferencedPDFs(now: Date = .now) throws -> Set<String> {
         guard documentScanCompleted, unreadableCount == 0 else { return [] }
-        let removed = try pdfResources.sweep(referenced: Set(notebooks.compactMap(\.pdfDigest)), now: now)
+        let removed = try pdfResources.sweep(referenced: Set(notebooks.flatMap(\.pdfDigests)), now: now)
         for digest in removed { originalBytes.removeValue(forKey: digest) }
         return removed
     }
@@ -304,7 +320,7 @@ final class LibraryStore {
         } else {
             let archive = try JSONDecoder().decode(NotebookArchive.self, from: data)
             notebook = archive.notebook
-            guard archive.version == 1, isValid(notebook),
+            guard (1...2).contains(archive.version), isValid(notebook),
                   notebook.pages.allSatisfy({ page in
                       page.layers.allSatisfy { $0.ink.isEmpty || (try? PKDrawing(data: $0.ink)) != nil }
                   }) else { throw CocoaError(.fileReadCorruptFile) }
@@ -312,6 +328,13 @@ final class LibraryStore {
                 guard let pdf = archive.originalPDF, try pageCount(pdf) == notebook.pages.count,
                       digest(pdf) == notebook.pdfDigest else { throw CocoaError(.fileReadCorruptFile) }
                 notebook.pdfDigest = try preservePDF(pdf)
+            }
+            let pagePDFs = archive.pagePDFs ?? [:]
+            for (hash, references) in Dictionary(grouping: notebook.pages.compactMap(\.pdfBackground), by: \.digest) {
+                guard let bytes = pagePDFs[hash], digest(bytes) == hash else { throw CocoaError(.fileReadCorruptFile) }
+                let count = try pageCount(bytes)
+                guard references.allSatisfy({ $0.index < count }) else { throw CocoaError(.fileReadCorruptFile) }
+                _ = try preservePDF(bytes)
             }
             notebook.id = UUID()
             notebook.trashedAt = nil
@@ -323,19 +346,24 @@ final class LibraryStore {
 
     func documentSize(_ notebook: Notebook) -> Int64 {
         let note = noteBytes[notebook.id] ?? 0
-        let pdf = notebook.pdfDigest.flatMap { originalBytes[$0] } ?? 0
+        let pdf = notebook.pdfDigests.reduce(0) { $0 + (originalBytes[$1] ?? 0) }
         return Int64(note) + Int64(pdf)
     }
 
     func archive(for notebook: Notebook) throws -> Data {
-        let pdf = try notebook.pdfDigest.map { expected in
+        func checkedPDF(_ expected: String) throws -> Data {
             let data = try Data(contentsOf: pdfURL(expected), options: .mappedIfSafe)
             guard digest(data) == expected else { throw CocoaError(.fileReadCorruptFile) }
             return data
         }
+        let pdf = try notebook.pdfDigest.map(checkedPDF)
+        var pagePDFs: [String: Data] = [:]
+        for digest in Set(notebook.pages.compactMap({ $0.pdfBackground?.digest })) {
+            pagePDFs[digest] = try checkedPDF(digest)
+        }
         var portable = notebook
         portable.folderID = nil
-        return try JSONEncoder().encode(NotebookArchive(version: 1, notebook: portable, originalPDF: pdf))
+        return try JSONEncoder().encode(NotebookArchive(version: pagePDFs.isEmpty ? 1 : 2, notebook: portable, originalPDF: pdf, pagePDFs: pagePDFs.isEmpty ? nil : pagePDFs))
     }
 
     private func isValid(_ notebook: Notebook) -> Bool {
@@ -345,7 +373,10 @@ final class LibraryStore {
                   !page.layers.isEmpty && Set(page.layers.map(\.id)).count == page.layers.count &&
                   validImages(page.images ?? []) && (page.paperSize?.isValid ?? true) &&
                   Set((page.bookmarks ?? []).map(\.id)).count == (page.bookmarks ?? []).count &&
-                  (page.pdfTextMarkups ?? []).allSatisfy(\.isValid)
+                  (page.pdfTextMarkups ?? []).allSatisfy(\.isValid) &&
+                  (page.pdfBackground.map {
+                      notebook.kind == .notebook && $0.index >= 0 && PDFResourceCollector.isDigest($0.digest)
+                  } ?? true)
               }) else { return false }
         if notebook.kind == .pdf {
             guard let digest = notebook.pdfDigest else { return false }
