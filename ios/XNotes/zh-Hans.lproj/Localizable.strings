@@ -79,3 +79,9 @@
 "Dot grid" = "点阵纸";
 "Open another view" = "并排查看同一文档";
 "Read-only view" = "只读视图";
+"Layer previews" = "图层缩略图";
+"No previews" = "不显示";
+"Ink bounds" = "已有笔记区域";
+"Whole page" = "整页";
+"Reorder layers" = "排序图层";
+"Layer options" = "图层选项";

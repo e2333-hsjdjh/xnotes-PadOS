@@ -19,6 +19,8 @@ struct NotebookEditor<SplitChoices: View>: View {
     @State private var width = 3.0
     @State private var pencilOnly = false
     @State private var showLayers = false
+    @State private var layerEditMode: EditMode = .inactive
+    @AppStorage("layerPreviewMode") private var layerPreviewMode = LayerPreviewMode.content
     @State private var imageSelection: PhotosPickerItem?
     @State private var imageImport: Task<Void, Never>?
     @State private var editingImages = false
@@ -89,6 +91,7 @@ struct NotebookEditor<SplitChoices: View>: View {
         }
         .onChange(of: page.id) {
             selectedLayer = nil
+            layerEditMode = .inactive
             editingImages = false
             loadBackground()
         }
@@ -317,6 +320,22 @@ struct NotebookEditor<SplitChoices: View>: View {
             HStack {
                 Text("Layers").font(.headline)
                 Spacer()
+                Menu {
+                    Picker("Layer previews", selection: $layerPreviewMode) {
+                        Text("No previews").tag(LayerPreviewMode.none)
+                        Text("Ink bounds").tag(LayerPreviewMode.content)
+                        if notebook.kind != .canvas {
+                            Text("Whole page").tag(LayerPreviewMode.page)
+                        }
+                    }
+                    Button(layerEditMode.isEditing ? "Done" : "Reorder layers") {
+                        layerEditMode = layerEditMode.isEditing ? .inactive : .active
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .frame(minWidth: 48, minHeight: 48)
+                }
+                .accessibilityLabel(Text("Layer options"))
                 icon("Add layer", "plus") {
                     let layer = DrawingLayer(name: String(localized: "Layer \(page.layers.count + 1)"))
                     updatePage { $0.layers.append(layer) }
@@ -325,9 +344,14 @@ struct NotebookEditor<SplitChoices: View>: View {
             }
             .padding(.leading, 8)
             List {
-                ForEach(page.layers.reversed()) { layer in
+                ForEach(Array(page.layers.reversed())) { layer in
                     Button { selectedLayer = layer.id } label: {
-                        HStack {
+                        HStack(spacing: 6) {
+                            let mode = notebook.kind == .canvas && layerPreviewMode == .page ? .content : layerPreviewMode
+                            if mode != .none {
+                                LayerThumbnail(ink: layer.ink, mode: mode, pageSize: paperSize)
+                                    .accessibilityHidden(true)
+                            }
                             Image(systemName: layer.visible ? "eye" : "eye.slash")
                             Text(layer.name)
                             if layer.locked { Image(systemName: "lock") }
@@ -352,10 +376,20 @@ struct NotebookEditor<SplitChoices: View>: View {
                         .disabled(page.layers.count == 1)
                     }
                 }
+                .onMove { indices, destination in
+                    let current = activeLayer
+                    updatePage { page in
+                        var topFirst = Array(page.layers.reversed())
+                        topFirst.move(fromOffsets: indices, toOffset: destination)
+                        page.layers = Array(topFirst.reversed())
+                    }
+                    selectedLayer = current
+                }
             }
+            .environment(\.editMode, $layerEditMode)
             .listStyle(.plain)
         }
-        .frame(width: 156)
+        .frame(width: 210)
     }
 
     private func moveLayer(_ id: UUID, offset: Int) {
