@@ -244,8 +244,8 @@ struct NotebookEditor<SplitChoices: View>: View {
         }
         .sheet(isPresented: $showCoverPicker) {
             let cover = notebook.pages.first.flatMap { $0.isCover == true ? $0 : nil }
-            CoverPicker(selection: cover?.coverArtwork) { pattern, artwork in
-                setCover(pattern, artwork: artwork)
+            CoverPicker(selection: cover?.coverArtwork, parameters: cover?.coverParameters) { pattern, artwork, parameters in
+                setCover(pattern, artwork: artwork, parameters: parameters)
             }
         }
         .sheet(isPresented: $showPaper) {
@@ -433,7 +433,7 @@ struct NotebookEditor<SplitChoices: View>: View {
         return ZStack(alignment: .topLeading) {
             darkPaper ? Color.black : Color.white
             if let artwork = page.coverArtwork {
-                NotebookCoverArtwork(cover: artwork)
+                NotebookCoverArtwork(cover: artwork, parameters: page.coverParameters)
             } else if let pattern = page.paperPattern, notebook.kind == .notebook, page.pdfBackground == nil {
                 PaperPatternView(pattern: pattern, dark: darkPaper)
                     .allowsHitTesting(false)
@@ -543,9 +543,9 @@ struct NotebookEditor<SplitChoices: View>: View {
         showPages = false
     }
 
-    private func setCover(_ pattern: PaperPattern, artwork: NotebookCover?) -> Bool {
+    private func setCover(_ pattern: PaperPattern, artwork: NotebookCover?, parameters: NotebookCoverParameters?) -> Bool {
         guard !readOnly, notebook.kind == .notebook, var updated = latestNotebook else { return false }
-        let pages = PageBatch.cover(pattern, artwork: artwork, in: updated.pages)
+        let pages = PageBatch.cover(pattern, artwork: artwork, parameters: parameters, in: updated.pages)
         if pages == updated.pages { return true }
         updated.pages = pages
         guard save(updated) else { return false }

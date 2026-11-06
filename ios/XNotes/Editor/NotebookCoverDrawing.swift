@@ -23,7 +23,7 @@ extension NotebookCover {
         }
     }
 
-    private var colors: (paper: UInt32, label: UInt32, rule: UInt32) {
+    var colors: (paper: UInt32, label: UInt32, rule: UInt32) {
         switch self {
         case .cloth: (0x6E2A2C, 0xF1E8D4, 0x3B2A26)
         case .kanagawa: (0xFAEAC6, 0xFDF8EC, 0x1F3D66)
@@ -38,7 +38,7 @@ extension NotebookCover {
         }
     }
 
-    private static func color(_ rgb: UInt32) -> CGColor {
+    static func color(_ rgb: UInt32) -> CGColor {
         CGColor(red: CGFloat((rgb >> 16) & 255) / 255,
                 green: CGFloat((rgb >> 8) & 255) / 255,
                 blue: CGFloat(rgb & 255) / 255, alpha: 1)
@@ -50,14 +50,14 @@ extension NotebookCover {
         return (cover, image)
     })
 
-    func draw(in context: CGContext, size: CGSize) {
+    func draw(in context: CGContext, size: CGSize, parameters: NotebookCoverParameters? = nil) {
         let bounds = CGRect(origin: .zero, size: size)
         context.saveGState()
         defer { context.restoreGState() }
         context.clip(to: bounds)
 
         let colors = colors
-        context.setFillColor(Self.color(colors.paper))
+        context.setFillColor(Self.color(self == .cloth ? parameters?.clothColor ?? colors.paper : colors.paper))
         context.fill(bounds)
 
         if let image = Self.artworks[self] {
@@ -91,6 +91,9 @@ extension NotebookCover {
             context.setLineWidth(max(0.5, edge * 0.003))
             context.stroke(bounds.insetBy(dx: edge * 0.05, dy: edge * 0.05))
         }
+        let labelScale = CGFloat(parameters?.labelScale ?? 1)
+        guard labelScale > 0 else { return }
+        let labelEdge = edge * labelScale
         let wide = max(0, size.width - size.height)
         let center: CGPoint
         switch self {
@@ -104,22 +107,23 @@ extension NotebookCover {
         case .saintTropez: center = CGPoint(x: size.width / 2, y: size.height * 0.18 - wide * 0.1)
         case .strawberryThief: center = CGPoint(x: size.width / 2, y: size.height * 0.28)
         }
-        let plate = CGRect(x: center.x - edge * 0.29, y: center.y - edge * 0.095,
-                           width: edge * 0.58, height: edge * 0.19)
-        context.setFillColor(Self.color(colors.label))
+        let plate = CGRect(x: center.x - labelEdge * 0.29, y: center.y - labelEdge * 0.095,
+                           width: labelEdge * 0.58, height: labelEdge * 0.19)
+        context.setFillColor(Self.color(parameters?.labelColor ?? colors.label))
         context.fill(plate)
-        context.setStrokeColor(Self.color(colors.rule))
+        context.setStrokeColor(Self.color(parameters?.ruleColor ?? colors.rule))
         context.setLineWidth(max(0.5, edge * 0.0016))
-        context.stroke(plate.insetBy(dx: edge * 0.008, dy: edge * 0.008))
+        context.stroke(plate.insetBy(dx: labelEdge * 0.008, dy: labelEdge * 0.008))
     }
 }
 
 struct NotebookCoverArtwork: View {
     let cover: NotebookCover
+    var parameters: NotebookCoverParameters? = nil
 
     var body: some View {
         Canvas { context, size in
-            context.withCGContext { cover.draw(in: $0, size: size) }
+            context.withCGContext { cover.draw(in: $0, size: size, parameters: parameters) }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)

@@ -47,7 +47,7 @@ enum NotebookPageDrawing {
             PDFTextMarkupDrawing.draw(page.pdfTextMarkups ?? [], in: graphics, size: bounds.size,
                                       rotation: original.rotation)
         } else if let artwork = page.coverArtwork {
-            artwork.draw(in: graphics, size: bounds.size)
+            artwork.draw(in: graphics, size: bounds.size, parameters: page.coverParameters)
         } else if let pattern = page.paperPattern {
             pattern.draw(in: graphics, size: bounds.size, dark: dark)
         }

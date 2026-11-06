@@ -11,6 +11,7 @@ enum PagePaperEdit {
         case .pattern(let pattern):
             page.paperPattern = pattern == .blank ? nil : pattern
             page.coverArtwork = nil
+            page.coverParameters = nil
         }
     }
 }
@@ -25,7 +26,8 @@ enum PageBatch {
         }
     }
 
-    static func cover(_ pattern: PaperPattern, artwork: NotebookCover? = nil, in pages: [NotePage]) -> [NotePage] {
+    static func cover(_ pattern: PaperPattern, artwork: NotebookCover? = nil,
+                      parameters: NotebookCoverParameters? = nil, in pages: [NotePage]) -> [NotePage] {
         guard let first = pages.first else { return pages }
         var result = pages
         if first.isCover != true {
@@ -33,6 +35,7 @@ enum PageBatch {
         }
         PagePaperEdit.pattern(pattern).apply(to: &result[0])
         result[0].coverArtwork = artwork
+        result[0].coverParameters = artwork == nil ? nil : parameters
         return result
     }
 

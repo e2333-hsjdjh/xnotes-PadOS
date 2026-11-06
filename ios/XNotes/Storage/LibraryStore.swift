@@ -437,6 +437,7 @@ final class LibraryStore {
               notebook.pages.allSatisfy({ page in
                   !page.layers.isEmpty && Set(page.layers.map(\.id)).count == page.layers.count &&
                   (page.coverArtwork == nil || (notebook.kind == .notebook && page.pdfBackground == nil)) &&
+                  (page.coverParameters.map { page.coverArtwork != nil && $0.isValid } ?? true) &&
                   validImages(page.images ?? []) && (page.paperSize?.isValid ?? true) &&
                   Set((page.bookmarks ?? []).map(\.id)).count == (page.bookmarks ?? []).count &&
                   (page.pdfTextMarkups ?? []).allSatisfy(\.isValid) &&
