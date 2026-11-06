@@ -19,7 +19,7 @@
 | `InfiniteEditor`、`InfiniteToolbar` | 2048 × 2048 可滚动书写区域、按内容裁切导出 PDF | 无限坐标、路径点、导航缩略图和画布专用工具 |
 | `PdfResources`、`PdfMarkups`、`BundlePdf` | PDF 导入、分页显示、原文查找、匹配位置高亮与滚动定位、目录跳转、从搜索结果添加可编辑文字标注及标准 PDF 文字注释导出、笔迹叠加、按 SHA-256 共享原件、按指纹重新关联原件、另存仅批注副本、包含原件的 iOS 备份、导出整份或所选页面的 PDF，保留可见笔迹与页面内容 | 自由选区文字标注、批处理、PDF 链接与交互对象保留、扫描 PDF 性能验证 |
 | `LayersPanel` | 侧栏、每页图层、选层、增删、命名、显隐、锁定、单层缩略图、菜单排序和编辑模式拖动排序 | 直接拖动排序、跨图层移动、焦点交接后的历史 |
-| `SplitDocumentPicker`、`PaneHomeState` | 两份文档并排、同一分页笔记或 PDF 的只读副视图、窗格内文件选择、主动恢复上次文档组合和独立页码与缩放 | 同文档编辑焦点接管、共享工具栏和焦点路由、精确滚动位置恢复 |
+| `SplitDocumentPicker`、`PaneHomeState` | 两份文档并排、同一分页笔记或 PDF 的只读副视图、窗格内文件夹浏览与文件选择、主动恢复上次文档组合和独立页码与缩放 | 同文档编辑焦点接管、共享工具栏和焦点路由、精确滚动位置恢复 |
 | `AskAi`、`AiSessions`、`PreferencesPane` | 外观切换 | AI 会话、供应商、Keychain、模型工具、截图和 PDF 附件，其他设置及帮助页面 |
 | `pen/`、`PenShortcutSettings` | PencilKit 输入、可切换仅 Apple Pencil | iPad 可用手势映射、真机压感、延迟、防误触与取消验收 |
 | `DocumentCodec`、`CanvasCodec`、`BundleIdentity` | iOS 版本化 `.xnotes` 备份 | Android `.xnote` 格式互通、旧版迁移及身份恢复 |

@@ -77,7 +77,7 @@ struct LibraryView: View {
                         if let id = pane.documentID, let notebook = openNotebook(id) {
                             editor(notebook, in: pane)
                         } else {
-                            PaneLibraryView(documents: paneDocuments(for: pane),
+                            PaneLibraryView(documents: paneDocuments(for: pane), folders: library.folders,
                                             open: { replace(pane, with: $0) },
                                             close: { removePane(pane) })
                         }
