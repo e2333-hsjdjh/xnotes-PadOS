@@ -13,7 +13,7 @@ enum NotebookKind: String, Codable, CaseIterable {
     }
 }
 
-struct DrawingLayer: Codable, Identifiable {
+struct DrawingLayer: Codable, Identifiable, Equatable {
     var id = UUID()
     var name: String
     var visible = true
@@ -21,7 +21,7 @@ struct DrawingLayer: Codable, Identifiable {
     var ink = Data()
 }
 
-struct PageImage: Codable, Identifiable {
+struct PageImage: Codable, Identifiable, Equatable {
     var id = UUID()
     let data: Data
     private var x: CGFloat
@@ -54,7 +54,7 @@ enum PaperPattern: String, Codable, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
-struct NotePage: Codable, Identifiable {
+struct NotePage: Codable, Identifiable, Equatable {
     var id = UUID()
     var text = ""
     var images: [PageImage]?

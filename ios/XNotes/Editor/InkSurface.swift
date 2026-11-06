@@ -32,8 +32,7 @@ struct InkSurface: UIViewRepresentable {
     let color: UIColor
     let width: CGFloat
     let pencilOnly: Bool
-    let changed: (Data) -> Void
-    let history: InkHistory
+    let changed: (Data, UUID?) -> Bool
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -43,10 +42,8 @@ struct InkSurface: UIViewRepresentable {
         view.isOpaque = false
         view.isScrollEnabled = false
         view.overrideUserInterfaceStyle = .light
-        view.drawing = (try? PKDrawing(data: ink)) ?? PKDrawing()
-        context.coordinator.loaded = ink
+        context.coordinator.load(ink, into: view)
         view.delegate = context.coordinator
-        history.canvas = view
         return view
     }
 
@@ -55,27 +52,40 @@ struct InkSurface: UIViewRepresentable {
         view.drawingPolicy = pencilOnly ? .pencilOnly : .anyInput
         view.tool = tool.pencilTool(color: color, width: width)
         if context.coordinator.loaded != ink {
-            context.coordinator.loaded = ink
-            view.drawing = (try? PKDrawing(data: ink)) ?? PKDrawing()
+            context.coordinator.load(ink, into: view)
         }
     }
 
     final class Coordinator: NSObject, PKCanvasViewDelegate {
-        var loaded = Data()
-        var changed: ((Data) -> Void)?
+        private(set) var loaded = Data()
+        private var displayed = Data()
+        private var gesture: UUID?
+        var changed: ((Data, UUID?) -> Bool)?
+
+        func load(_ ink: Data, into canvasView: PKCanvasView) {
+            let drawing = (try? PKDrawing(data: ink)) ?? PKDrawing()
+            loaded = ink
+            displayed = drawing.dataRepresentation()
+            canvasView.drawing = drawing
+        }
+
+        func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) {
+            gesture = UUID()
+        }
+
+        func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
+            gesture = nil
+        }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
             let data = canvasView.drawing.dataRepresentation()
-            guard data != loaded, !canvasView.drawing.strokes.isEmpty || !loaded.isEmpty else { return }
-            loaded = data
-            changed?(data)
+            guard data != displayed, let changed else { return }
+            if changed(data, gesture) {
+                loaded = data
+                displayed = data
+            } else {
+                load(loaded, into: canvasView)
+            }
         }
     }
-}
-
-final class InkHistory {
-    weak var canvas: PKCanvasView?
-
-    func undo() { canvas?.undoManager?.undo() }
-    func redo() { canvas?.undoManager?.redo() }
 }

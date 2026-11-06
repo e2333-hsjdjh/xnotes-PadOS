@@ -31,11 +31,13 @@ struct NotebookEditor<SplitChoices: View>: View {
     @State private var layerName = ""
     @State private var pdf: PDFDocument?
     @State private var pdfImage: UIImage?
-    @State private var history = InkHistory()
+    @State private var history = DocumentHistory()
 
     private var pageIndex: Int {
         notebook.pages.firstIndex { $0.id == selectedPageID } ?? 0
     }
+
+    private var latestNotebook: Notebook? { library.notebooks.first { $0.id == notebook.id } }
 
     private var page: NotePage { notebook.pages[pageIndex] }
     private var activeLayer: UUID {
@@ -80,6 +82,7 @@ struct NotebookEditor<SplitChoices: View>: View {
         .onDisappear { imageImport?.cancel() }
         .onChange(of: readOnly) {
             guard readOnly else { return }
+            history.clear()
             imageImport?.cancel()
             imageSelection = nil
             editingImages = false
@@ -177,8 +180,10 @@ struct NotebookEditor<SplitChoices: View>: View {
                 ForEach(InkTool.allCases, id: \.self) { item in
                     icon(item.label, item.rawValue, selected: tool == item) { tool = item }
                 }
-                icon("Undo", "arrow.uturn.backward") { history.undo() }
-                icon("Redo", "arrow.uturn.forward") { history.redo() }
+                icon("Undo", "arrow.uturn.backward") { replay(redo: false) }
+                    .disabled(!history.canUndo)
+                icon("Redo", "arrow.uturn.forward") { replay(redo: true) }
+                    .disabled(!history.canRedo)
                 icon("Page text", "textformat") {
                     text = page.text
                     editingText = true
@@ -238,8 +243,13 @@ struct NotebookEditor<SplitChoices: View>: View {
                     InkSurface(
                         ink: layer.ink, tool: tool, color: darkPaper ? .white : .black,
                         width: width, pencilOnly: pencilOnly,
-                        changed: { data in updateLayer(layer.id, on: pageID) { $0.ink = data } },
-                        history: history
+                        changed: { data, gesture in
+                            updatePage(on: pageID, gesture: gesture) { page in
+                                guard let index = page.layers.firstIndex(where: { $0.id == layer.id }),
+                                      !page.layers[index].locked else { return }
+                                page.layers[index].ink = data
+                            }
+                        }
                     )
                     .id(layer.id)
                     .allowsHitTesting(!editingImages)
@@ -283,16 +293,17 @@ struct NotebookEditor<SplitChoices: View>: View {
     }
 
     private func addPage() {
-        var updated = notebook
+        guard var updated = latestNotebook,
+              let index = updated.pages.firstIndex(where: { $0.id == page.id }) else { return }
         var newPage = NotePage()
-        newPage.paperSize = page.paperSize
-        updated.pages.insert(newPage, at: pageIndex + 1)
+        newPage.paperSize = updated.pages[index].paperSize
+        updated.pages.insert(newPage, at: index + 1)
         if save(updated) { selectedPageID = newPage.id }
     }
 
     private func duplicatePage(_ id: UUID) {
-        var updated = notebook
-        guard let index = updated.pages.firstIndex(where: { $0.id == id }) else { return }
+        guard var updated = latestNotebook,
+              let index = updated.pages.firstIndex(where: { $0.id == id }) else { return }
         var copy = updated.pages[index]
         copy.id = UUID()
         if let images = copy.images {
@@ -308,8 +319,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     }
 
     private func deletePage(_ id: UUID) {
-        var updated = notebook
-        guard updated.pages.count > 1,
+        guard var updated = latestNotebook, updated.pages.count > 1,
               let index = updated.pages.firstIndex(where: { $0.id == id }) else { return }
         let current = page.id
         updated.pages.remove(at: index)
@@ -319,7 +329,8 @@ struct NotebookEditor<SplitChoices: View>: View {
     }
 
     private func movePages(_ indices: IndexSet, _ destination: Int) {
-        var updated = notebook
+        guard var updated = latestNotebook,
+              updated.pages.map(\.id) == notebook.pages.map(\.id) else { return }
         let current = page.id
         updated.pages.move(fromOffsets: indices, toOffset: destination)
         if save(updated) { selectedPageID = current }
@@ -463,15 +474,39 @@ struct NotebookEditor<SplitChoices: View>: View {
         }
     }
 
-    @discardableResult private func updatePage(on pageID: UUID? = nil, _ change: (inout NotePage) -> Void) -> Bool {
-        var updated = library.notebooks.first { $0.id == notebook.id } ?? notebook
+    @discardableResult private func updatePage(on pageID: UUID? = nil, gesture: UUID? = nil, _ change: (inout NotePage) -> Void) -> Bool {
+        guard var updated = latestNotebook else { return false }
         let targetID = pageID ?? page.id
         guard let index = updated.pages.firstIndex(where: { $0.id == targetID }) else { return false }
         change(&updated.pages[index])
-        return save(updated)
+        return save(updated, gesture: gesture)
     }
 
-    @discardableResult private func save(_ updated: Notebook) -> Bool {
+    @discardableResult private func save(_ updated: Notebook, gesture: UUID? = nil) -> Bool {
+        guard !readOnly, let previous = library.notebooks.first(where: { $0.id == updated.id }) else { return false }
+        guard previous.pages != updated.pages else { return false }
+        var next = previous
+        next.pages = updated.pages
+        guard persist(next) else { return false }
+        history.record(before: previous.pages, after: next.pages, gesture: gesture)
+        return true
+    }
+
+    private func replay(redo: Bool) {
+        guard !readOnly, let current = library.notebooks.first(where: { $0.id == notebook.id }) else { return }
+        let apply: ([NotePage]) -> Bool = { pages in
+            var updated = current
+            updated.pages = pages
+            return persist(updated)
+        }
+        if redo {
+            history.redo(current: current.pages, persist: apply)
+        } else {
+            history.undo(current: current.pages, persist: apply)
+        }
+    }
+
+    private func persist(_ updated: Notebook) -> Bool {
         do {
             try library.save(updated)
             return true
