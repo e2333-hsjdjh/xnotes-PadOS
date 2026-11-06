@@ -303,6 +303,7 @@ struct NotebookEditor<SplitChoices: View>: View {
             openPDFMatch: showPDFMatches,
             add: addPage,
             copyPages: copyPages,
+            cutPages: cutPages,
             pasteCount: canEdit ? (library.pageClipboard?.pages.count ?? 0) : 0,
             pastePages: pastePages,
             duplicate: duplicatePages,
@@ -525,8 +526,19 @@ struct NotebookEditor<SplitChoices: View>: View {
 
     private func copyPages(_ ids: Set<UUID>) -> Bool {
         do {
-            try library.copyPages(from: notebook.id, selecting: ids)
-            return true
+            return try library.copyPages(from: notebook.id, selecting: ids)
+        } catch {
+            library.issue = error.localizedDescription
+            return false
+        }
+    }
+
+    private func cutPages(_ ids: Set<UUID>) -> Bool {
+        guard canEdit, notebook.kind == .notebook else { return false }
+        do {
+            return try library.copyPages(from: notebook.id, selecting: ids) {
+                deletePages(ids)
+            }
         } catch {
             library.issue = error.localizedDescription
             return false

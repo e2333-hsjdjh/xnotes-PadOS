@@ -17,6 +17,7 @@ struct PageNavigator: View {
     let openPDFMatch: (UUID, String) -> Void
     let add: () -> Void
     let copyPages: (Set<UUID>) -> Bool
+    let cutPages: (Set<UUID>) -> Bool
     let pasteCount: Int
     let pastePages: () -> Void
     let duplicate: (Set<UUID>) -> Bool
@@ -145,8 +146,16 @@ struct PageNavigator: View {
                             Button("Export selected pages as PNG") { prepareExport(asImages: true) }
                         }
                         .disabled(selected.isEmpty)
-                        Button("Copy selected pages", systemImage: "doc.on.doc") {
-                            if copyPages(selected) { endSelection() }
+                        Menu("Page clipboard", systemImage: "doc.on.doc") {
+                            Button("Copy selected pages", systemImage: "doc.on.doc") {
+                                if copyPages(selected) { endSelection() }
+                            }
+                            if editable {
+                                Button("Cut selected pages", systemImage: "scissors") {
+                                    if cutPages(selected) { endSelection() }
+                                }
+                                .disabled(selected.count >= pages.count)
+                            }
                         }
                         .disabled(selected.isEmpty)
                         if editable {
@@ -325,6 +334,8 @@ struct PageNavigator: View {
                 Button("Copy page", systemImage: "doc.on.doc") { _ = copyPages([page.id]) }
             }
             if editable && !selecting {
+                Button("Cut page", systemImage: "scissors") { _ = cutPages([page.id]) }
+                    .disabled(pages.count == 1)
                 Button("Duplicate page", systemImage: "plus.square.on.square") { _ = duplicate([page.id]) }
                 Button("Delete page", systemImage: "trash", role: .destructive) { deleting = [page.id] }
                     .disabled(pages.count == 1)

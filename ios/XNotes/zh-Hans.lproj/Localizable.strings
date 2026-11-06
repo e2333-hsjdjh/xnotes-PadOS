@@ -192,3 +192,6 @@
 "Copy page" = "拷贝页面";
 "Copy selected pages" = "拷贝所选页面";
 "Paste %lld pages" = "粘贴 %lld 页";
+"Page clipboard" = "页面剪贴板";
+"Cut page" = "剪切页面";
+"Cut selected pages" = "剪切所选页面";

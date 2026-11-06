@@ -221,7 +221,9 @@ final class LibraryStore {
         return document
     }
 
-    func copyPages(from id: UUID, selecting ids: Set<UUID>) throws {
+    @discardableResult
+    func copyPages(from id: UUID, selecting ids: Set<UUID>,
+                   beforePublishing: () -> Bool = { true }) throws -> Bool {
         guard let notebook = notebooks.first(where: { $0.id == id && $0.trashedAt == nil }),
               notebook.kind != .canvas, !ids.isEmpty else { throw CocoaError(.fileReadNoSuchFile) }
         let pages = notebook.pages.enumerated().filter { ids.contains($0.element.id) }.map { index, original in
@@ -239,7 +241,9 @@ final class LibraryStore {
                 throw CocoaError(.fileReadCorruptFile)
             }
         }
+        guard beforePublishing() else { return false }
         pageClipboard = PageClipboard(pages: pages, sources: sources)
+        return true
     }
 
     func pagePDF(for digest: String) -> PDFDocument? {
