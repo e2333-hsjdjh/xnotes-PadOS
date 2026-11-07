@@ -8,6 +8,8 @@ struct LibraryView: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var library: LibraryStore
     let aiSettings: AIConfigurationStore
+    let aiSessions: AISessions
+    @State private var showingAI = false
     @State private var showingAISettings = false
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("librarySort") private var sort = LibrarySort.modified
@@ -156,6 +158,7 @@ struct LibraryView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingAI) { AIChatView(sessions: aiSessions, settings: aiSettings) }
         .sheet(isPresented: $showingAISettings) { AISettingsView(store: aiSettings) }
         .onAppear { maintainStorage() }
         .onChange(of: scenePhase) { if scenePhase == .active { maintainStorage() } }
@@ -252,6 +255,7 @@ struct LibraryView: View {
                                 }
                             }
                         }
+                        Button("AI", systemImage: "sparkles") { showingAI = true }
                         Button("AI settings", systemImage: "sparkles") { showingAISettings = true }
                         Picker("Appearance", selection: $appearance) {
                             Text("System").tag("system")
@@ -568,6 +572,7 @@ struct LibraryView: View {
     }
 
     private func purgeExpiredTrash() {
+        aiSessions.purgeExpiredTrash(days: trashRetention.rawValue)
         let result = library.purgeExpiredTrash(days: trashRetention.rawValue)
         selectedDocuments.subtract(result.saved)
         if let detail = result.failures.values.sorted().first {

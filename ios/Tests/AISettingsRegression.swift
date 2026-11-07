@@ -168,8 +168,10 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
         Task { @MainActor in
             do {
                 try await AISettingsRegression.run()
+                try await AIChatRegression.run()
                 if let window { try await snapshots(window: window) }
                 print("PASS AI settings native light and dark screenshots")
+                print("PASS AI chat and history native light and dark screenshots")
                 exit(0)
             } catch {
                 print("FAIL AI settings regression: \(error.localizedDescription)")
@@ -206,4 +208,31 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
             try image.pngData()!.write(to: output.appending(path: name))
         }
     }
+    let history = AIHistoryStore(directory: directory.appending(path: "History"))
+    var record = AIConversation(title: "学习笔记")
+    var turn = AITurn(question: "请解释这个公式的含义。", model: config.defaultModel!, effort: .providerDefault)
+    turn.answer = "**结论**：x^2 + y^2 = r^2 表示以原点为圆心、半径为 r 的圆。\n\n其中 x、y 为坐标，r 是半径。"
+    turn.status = .completed
+    record.turns = [turn]
+    record.model = config.defaultModel
+    try history.save(record)
+    let sessions = AISessions(history: history)
+    for dark in [false, true] {
+        for transcript in [true, false] {
+            let view = transcript ? AnyView(AIChatView(sessions: sessions, settings: store, initialConversationID: record.id)) : AnyView(AIHistoryView(sessions: sessions, retentionDays: 7, select: { _ in }))
+            let host = UIHostingController(rootView: view.environment(\.colorScheme, dark ? .dark : .light))
+            host.overrideUserInterfaceStyle = dark ? .dark : .light
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            try await Task.sleep(for: .milliseconds(500))
+            host.view.layoutIfNeeded()
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            let image = UIGraphicsImageRenderer(bounds: window.bounds, format: format).image { _ in
+                window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            }
+            try image.pngData()!.write(to: output.appending(path: "ai-\(transcript ? "chat" : "history")-\(dark ? "dark" : "light").png"))
+        }
+    }
+
 }

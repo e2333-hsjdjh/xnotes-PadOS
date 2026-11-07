@@ -39,6 +39,7 @@ xcrun --sdk iphonesimulator swiftc -target arm64-apple-ios17.0-simulator \
     "$repo_root"/ios/XNotes/AI/*.swift \
     "$repo_root/ios/XNotes/App/UITokens.swift" \
     "$repo_root/ios/Tests/AISettingsRegression.swift" \
+    "$repo_root/ios/Tests/AIChatRegression.swift" \
     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker "$test_root/SimulatedEntitlements.plist" \
     -o "$bundle_path/Regression"
 cp -R "$repo_root/ios/XNotes/zh-Hans.lproj" "$bundle_path/"
@@ -47,3 +48,4 @@ xcrun simctl install "$simulator_id" "$bundle_path"
 trap 'xcrun simctl uninstall "$simulator_id" com.xnotes.ios.ai-settings-regression >/dev/null 2>&1 || true' EXIT
 xcrun simctl launch --console --terminate-running-process "$simulator_id" com.xnotes.ios.ai-settings-regression "$test_root" -AppleLanguages '(zh-Hans)' | tee "$test_root/Result.log"
 rg -q '^PASS AI settings native light and dark screenshots' "$test_root/Result.log"
+rg -q '^PASS AI chat and history native light and dark screenshots' "$test_root/Result.log"
