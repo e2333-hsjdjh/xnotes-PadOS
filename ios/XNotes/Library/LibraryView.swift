@@ -7,6 +7,8 @@ struct LibraryView: View {
     @State private var pendingRetention: TrashRetention?
     @Environment(\.colorScheme) private var scheme
     @Bindable var library: LibraryStore
+    let aiSettings: AIConfigurationStore
+    @State private var showingAISettings = false
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("librarySort") private var sort = LibrarySort.modified
     @AppStorage("libraryDescending") private var descending = true
@@ -154,6 +156,7 @@ struct LibraryView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingAISettings) { AISettingsView(store: aiSettings) }
         .onAppear { maintainStorage() }
         .onChange(of: scenePhase) { if scenePhase == .active { maintainStorage() } }
         .onChange(of: trashRetention) { purgeExpiredTrash() }
@@ -249,6 +252,7 @@ struct LibraryView: View {
                                 }
                             }
                         }
+                        Button("AI settings", systemImage: "sparkles") { showingAISettings = true }
                         Picker("Appearance", selection: $appearance) {
                             Text("System").tag("system")
                             Text("Light").tag("light")
