@@ -88,6 +88,8 @@ extension PaperPattern {
         case .calligraphy: "Calligraphy guide"
         case .isometricGrid: "Isometric grid"
         case .isometricDots: "Isometric dots"
+        case .polar: "Polar grid"
+        case .semilog: "Semi-log paper"
         }
     }
 }
@@ -115,6 +117,18 @@ private struct PaperParametersView: View {
                 let count = Binding(get: { draft.squaresPerBlock ?? 5 }, set: { draft.squaresPerBlock = $0 })
                 Stepper(value: count, in: 2...10) {
                     LabeledContent("Squares per block", value: count.wrappedValue.formatted())
+                }
+            }
+            if pattern == .polar {
+                let count = Binding(get: { draft.spokes ?? 24 }, set: { draft.spokes = $0 })
+                Stepper(value: count, in: 4...72) {
+                    LabeledContent("Spokes", value: count.wrappedValue.formatted())
+                }
+            }
+            if pattern == .semilog {
+                let count = Binding(get: { draft.decades ?? 3 }, set: { draft.decades = $0 })
+                Stepper(value: count, in: 1...6) {
+                    LabeledContent("Logarithmic decades", value: count.wrappedValue.formatted())
                 }
             }
             if pattern == .cornell {
@@ -156,6 +170,8 @@ private struct PaperParametersView: View {
         case .calligraphy: "Nib width"
         case .isometricGrid: "Triangle side"
         case .isometricDots: "Dot spacing"
+        case .polar: "Ring spacing"
+        case .semilog: "Linear spacing"
         default: "Template spacing"
         }
     }

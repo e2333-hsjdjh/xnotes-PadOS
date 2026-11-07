@@ -10,6 +10,8 @@ struct PaperPatternParameters: Codable, Equatable {
     var summaryMM: Double?
     var xHeight: Double?
     var slant: Double?
+    var spokes: Int?
+    var decades: Int?
 
     static func defaults(for pattern: PaperPattern) -> Self {
         let points: Double
@@ -24,6 +26,8 @@ struct PaperPatternParameters: Codable, Equatable {
         case .calligraphy: return Self(spacingMM: 3, xHeight: 5, slant: 7)
         case .isometricGrid: return Self(spacingMM: 8)
         case .isometricDots: return Self(spacingMM: 6)
+        case .polar: return Self(spacingMM: 8, spokes: 24)
+        case .semilog: return Self(spacingMM: 5, decades: 3)
         }
         return Self(spacingMM: points / NotebookPaperSize.pointsPerMillimeter)
     }
@@ -37,6 +41,8 @@ struct PaperPatternParameters: Codable, Equatable {
         case .calligraphy: 1...8
         case .isometricGrid: 4...25
         case .isometricDots: 3...20
+        case .polar: 3...25
+        case .semilog: 2...15
         default: 3...15
         }
     }
@@ -45,6 +51,7 @@ struct PaperPatternParameters: Codable, Equatable {
         pattern != .blank && Self.spacingRange(for: pattern).contains(spacingMM) &&
             (0...60).contains(headerMM) && (0...60).contains(marginMM) && (0...1).contains(opacity) && (2...10).contains(squaresPerBlock ?? 5) &&
             (0.15...0.45).contains(cueFraction ?? 0.3) && (25...90).contains(summaryMM ?? 50) &&
-            (3...8).contains(xHeight ?? 5) && (0...20).contains(slant ?? 7)
+            (3...8).contains(xHeight ?? 5) && (0...20).contains(slant ?? 7) &&
+            (4...72).contains(spokes ?? 24) && (1...6).contains(decades ?? 3)
     }
 }

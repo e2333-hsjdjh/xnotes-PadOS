@@ -50,6 +50,10 @@ extension PaperPattern {
             IsometricPaperDrawing.lines(in: context, size: size, side: spacing, preview: preview)
         case .isometricDots:
             IsometricPaperDrawing.dots(in: context, size: size, side: spacing, preview: preview)
+        case .polar:
+            ScientificPaperDrawing.polar(in: context, size: size, settings: values, gray: gray, preview: preview)
+        case .semilog:
+            ScientificPaperDrawing.semilog(in: context, size: size, settings: values, gray: gray, preview: preview)
         case .engineering:
             Self.drawEngineering(in: context, size: size, spacing: spacing, group: values.squaresPerBlock ?? 5,
                                  gray: gray, opacity: values.opacity, preview: preview)

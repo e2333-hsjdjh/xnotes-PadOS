@@ -241,3 +241,10 @@
 "Isometric dots" = "等距点阵";
 "Triangle side" = "三角形边长";
 "Dot spacing" = "点间距";
+
+"Polar grid" = "极坐标纸";
+"Semi-log paper" = "半对数纸";
+"Spokes" = "射线数量";
+"Logarithmic decades" = "对数区间数量";
+"Ring spacing" = "圆环间距";
+"Linear spacing" = "线性间距";
