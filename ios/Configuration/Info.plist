@@ -2,21 +2,42 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>UTExportedTypeDeclarations</key>
-    <array>
-        <dict>
-            <key>UTTypeIdentifier</key>
-            <string>com.xnotes.ios.archive</string>
-            <key>UTTypeDescription</key>
-            <string>XNotes iOS Backup</string>
-            <key>UTTypeConformsTo</key>
-            <array><string>public.data</string></array>
-            <key>UTTypeTagSpecification</key>
-            <dict>
-                <key>public.filename-extension</key>
-                <array><string>xnotes</string></array>
-            </dict>
-        </dict>
-    </array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.xnotes.ios.archive</string>
+			<key>UTTypeDescription</key>
+			<string>XNotes iOS Backup</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>xnotes</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.xnotes.ios.library</string>
+			<key>UTTypeDescription</key>
+			<string>XNotes Library Backup</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>xnoteslibrary</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

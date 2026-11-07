@@ -248,3 +248,7 @@
 "Logarithmic decades" = "对数区间数量";
 "Ring spacing" = "圆环间距";
 "Linear spacing" = "线性间距";
+
+"Export folder tree backup" = "导出文件夹树备份";
+"Library backup" = "文档库备份";
+"Library recovery is pending. Reopen the app to finish restoring before making changes." = "文档库恢复尚未完成。请重新打开应用，完成恢复后再修改。";

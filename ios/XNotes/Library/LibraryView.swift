@@ -90,9 +90,15 @@ struct LibraryView: View {
             if panes != active { panes = active }
             rememberSplit(active)
         }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf, .xnotesArchive]) { result in
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf, .xnotesArchive, .xnotesLibrary]) { result in
             perform {
-                open(try library.importFile(result.get(), into: currentFolder?.id))
+                let url = try result.get()
+                if url.pathExtension.lowercased() == "xnoteslibrary" {
+                    folderID = try library.importLibrary(url, into: currentFolder?.id)
+                    query = ""
+                } else {
+                    open(try library.importFile(url, into: currentFolder?.id))
+                }
             }
         }
         .fileExporter(isPresented: $exporting, documents: export, contentType: exportType) {
@@ -210,6 +216,10 @@ struct LibraryView: View {
                                 }
                             }
                             Button("Folders", systemImage: "folder") { folderRequest = FolderRequest(action: .browse) }
+                            Button("Export folder tree backup", systemImage: "square.and.arrow.up") {
+                                exportFolderTree(currentFolder?.id)
+                            }
+                            .disabled(selectingDocuments)
                         }
                         Picker("Layout", selection: $layout) {
                             Text("List").tag(LibraryLayout.list)
@@ -322,6 +332,7 @@ struct LibraryView: View {
             }
             .contextMenu {
                 Button("Rename", systemImage: "pencil") { editFolder(folder) }
+                Button("Export folder tree backup", systemImage: "square.and.arrow.up") { exportFolderTree(folder.id) }
                 Button("Move folder", systemImage: "folder") {
                     folderRequest = FolderRequest(action: .moveFolder(folder.id))
                 }
@@ -557,6 +568,14 @@ struct LibraryView: View {
         selectedDocuments.subtract(result.saved)
         if let detail = result.failures.values.sorted().first {
             library.issue = String(localized: "\(result.failures.count) documents could not be updated. \(detail)")
+        }
+    }
+
+    private func exportFolderTree(_ root: UUID?) {
+        perform {
+            export = [ExportFile(data: try library.libraryArchive(root: root), filename: "XNotes.xnoteslibrary")]
+            exportType = .xnotesLibrary
+            exporting = true
         }
     }
 

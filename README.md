@@ -42,4 +42,4 @@
 
 ## iOS 移植
 
-原生 SwiftUI 工程、运行说明与 Android 功能对照表见 [XNotes for iOS](ios/README.md)。当前为移植的首个功能阶段。
+原生 SwiftUI 工程、运行说明与 Android 功能对照表见 [XNotes for iOS](ios/README.md)。当前已接入文档库、分页编辑、PDF、图层、双窗格及备份等功能，仍在逐项对齐；未完成与待真机验收项目见功能对照表。

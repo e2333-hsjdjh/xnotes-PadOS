@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ExportFile: FileDocument {
-    static let readableContentTypes: [UTType] = [.xnotesArchive, .pdf, .png]
+    static let readableContentTypes: [UTType] = [.xnotesArchive, .xnotesLibrary, .pdf, .png]
     var data = Data()
     var filename: String?
 

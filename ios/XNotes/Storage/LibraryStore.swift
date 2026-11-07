@@ -34,6 +34,7 @@ final class LibraryStore {
         viewStates = DocumentViewStateStore(directory: directory.appending(path: "ViewStates"))
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try LibraryRestoreTransaction.recover(in: directory)
             loadFolders()
             let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
             for file in files where file.pathExtension == "json" {
@@ -117,7 +118,14 @@ final class LibraryStore {
         try writeFolders(folders.filter { $0.id != folder.id })
     }
 
+    private func ensureWritable() throws {
+        guard documentScanCompleted, !LibraryRestoreTransaction.isPending(in: directory) else {
+            throw LibraryRestoreError.pending
+        }
+    }
+
     private func writeFolders(_ updated: [LibraryFolder]) throws {
+        try ensureWritable()
         try PropertyListEncoder().encode(updated).write(to: folderCatalog, options: .atomic)
         folders = updated
     }
@@ -173,6 +181,7 @@ final class LibraryStore {
     }
 
     func save(_ notebook: Notebook) throws {
+        try ensureWritable()
         var updated = notebook
         let previous = notebooks.first { $0.id == updated.id }
         for digest in updated.pdfDigests.subtracting(previous?.pdfDigests ?? []) {
@@ -200,6 +209,7 @@ final class LibraryStore {
     }
 
     private func deleteDocument(_ id: UUID, requiresTrash: Bool) throws {
+        try ensureWritable()
         guard notebooks.contains(where: { $0.id == id && ($0.trashedAt != nil) == requiresTrash }) else {
             throw CocoaError(.fileNoSuchFile)
         }
@@ -275,7 +285,8 @@ final class LibraryStore {
 
     @discardableResult
     func sweepUnreferencedPDFs(now: Date = .now) throws -> Set<String> {
-        guard documentScanCompleted, unreadableCount == 0 else { return [] }
+        guard documentScanCompleted, unreadableCount == 0,
+              !LibraryRestoreTransaction.isPending(in: directory) else { return [] }
         let removed = try pdfResources.sweep(referenced: Set(notebooks.flatMap(\.pdfDigests)), now: now)
         for digest in removed { originalBytes.removeValue(forKey: digest) }
         return removed
@@ -325,6 +336,7 @@ final class LibraryStore {
     }
 
     private func publishRecoveredPDF(_ candidate: Data, digest expected: String) throws {
+        try ensureWritable()
         let destination = pdfURL(expected)
         if (try? Data(contentsOf: destination, options: .mappedIfSafe)) != candidate {
             try candidate.write(to: destination, options: .atomic)
@@ -409,6 +421,79 @@ final class LibraryStore {
         return notebook.id
     }
 
+    func libraryArchive(root: UUID?) throws -> Data {
+        try ensureWritable()
+        guard folderCatalogReadable, unreadableCount == 0, documentScanCompleted,
+              root == nil || folders.contains(where: { $0.id == root }) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        let ids = root.map { LibraryFolder.subtree(root: $0, in: folders) } ?? Set(folders.map(\.id))
+        let selected = notebooks.filter { note in
+            note.trashedAt == nil && (root == nil || note.folderID.map(ids.contains) == true)
+        }
+        let selectedFolders = folders.filter { ids.contains($0.id) }.map { original in
+            var folder = original
+            if folder.id == root { folder.parentID = nil }
+            return folder
+        }
+        var pdfs: [String: Data] = [:]
+        for hash in Set(selected.flatMap(\.pdfDigests)) {
+            let bytes = try Data(contentsOf: pdfURL(hash), options: .mappedIfSafe)
+            guard digest(bytes) == hash else { throw CocoaError(.fileReadCorruptFile) }
+            pdfs[hash] = bytes
+        }
+        let archive = LibraryArchive(name: String(localized: "Library backup"), folders: selectedFolders,
+                                     notebooks: selected, pdfs: pdfs)
+        try archive.validateHierarchy()
+        return try JSONEncoder().encode(archive)
+    }
+
+    /// Restores a copy below a fresh container, never replacing existing documents.
+    @discardableResult
+    func importLibrary(_ url: URL, into parentID: UUID?) throws -> UUID {
+        try ensureWritable()
+        guard folderCatalogReadable, parentID == nil || folders.contains(where: { $0.id == parentID }) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        let archive = try JSONDecoder().decode(LibraryArchive.self, from: readFile(url))
+        try archive.validateHierarchy()
+        let references = Set(archive.notebooks.flatMap(\.pdfDigests))
+        guard Set(archive.pdfs.keys) == references else { throw CocoaError(.fileReadCorruptFile) }
+        var pageCounts: [String: Int] = [:]
+        for (hash, bytes) in archive.pdfs {
+            guard digest(bytes) == hash else { throw CocoaError(.fileReadCorruptFile) }
+            pageCounts[hash] = try pageCount(bytes)
+        }
+        for note in archive.notebooks {
+            guard isValid(note), note.pages.allSatisfy({ page in
+                page.layers.allSatisfy { $0.ink.isEmpty || (try? PKDrawing(data: $0.ink)) != nil }
+            }), note.pdfDigest.map({ pageCounts[$0] == note.pages.count }) ?? true,
+            note.pages.compactMap(\.pdfBackground).allSatisfy({ $0.index < (pageCounts[$0.digest] ?? 0) }) else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+        }
+        let container = LibraryFolder(name: archive.name, parentID: parentID)
+        let mapping = Dictionary(uniqueKeysWithValues: archive.folders.map { ($0.id, UUID()) })
+        let restoredFolders = archive.folders.map { source in
+            LibraryFolder(id: mapping[source.id]!, name: source.name,
+                          parentID: source.parentID.flatMap { mapping[$0] } ?? container.id)
+        }
+        let restored = archive.notebooks.map { source in
+            var note = source
+            note.id = UUID()
+            note.folderID = source.folderID.flatMap { mapping[$0] } ?? container.id
+            return note
+        }
+        for hash in references { try pdfResources.protect(hash) }
+        let updatedFolders = folders + [container] + restoredFolders
+        try LibraryRestoreTransaction.commit(notes: restored, folders: updatedFolders, pdfs: archive.pdfs, in: directory)
+        folders = updatedFolders
+        notebooks.append(contentsOf: restored)
+        for note in restored { noteBytes[note.id] = try JSONEncoder().encode(note).count }
+        for (hash, data) in archive.pdfs { originalBytes[hash] = data.count }
+        return container.id
+    }
+
     func documentSize(_ notebook: Notebook) -> Int64 {
         let note = noteBytes[notebook.id] ?? 0
         let pdf = notebook.pdfDigests.reduce(0) { $0 + (originalBytes[$1] ?? 0) }
@@ -485,6 +570,7 @@ final class LibraryStore {
     }
 
     private func preservePDF(_ data: Data) throws -> String {
+        try ensureWritable()
         let hash = digest(data)
         let file = pdfURL(hash)
         if FileManager.default.fileExists(atPath: file.path) {
@@ -513,5 +599,13 @@ private enum PDFRecoveryError: LocalizedError {
 }
 
 extension UTType {
+    static let xnotesLibrary = UTType(exportedAs: "com.xnotes.ios.library", conformingTo: .data)
     static let xnotesArchive = UTType(exportedAs: "com.xnotes.ios.archive", conformingTo: .data)
+}
+
+private enum LibraryRestoreError: LocalizedError {
+    case pending
+    var errorDescription: String? {
+        String(localized: "Library recovery is pending. Reopen the app to finish restoring before making changes.")
+    }
 }
