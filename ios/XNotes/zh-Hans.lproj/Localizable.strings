@@ -404,3 +404,5 @@
 
 "Add at least one chat or image model ID, up to 200 characters each." = "请至少添加一个聊天或生图模型 ID，每个不超过 200 个字符。";
 "Each model group can contain at most 200 models. Nothing was truncated." = "每组最多保存 200 个模型，未截断任何模型。";
+
+"AI request failed (HTTP %d): %@" = "AI 请求失败（HTTP %d）：%@";

@@ -170,6 +170,7 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
             do {
                 try await AISettingsRegression.run()
                 try AIModelKindsRegression.run()
+                try await AIHTTPCompatibilityRegression.run()
                 AIMarkdownRegression.run()
                 try PDFSelectionRegression.run()
                 try PDFExportLinkRegression.run()

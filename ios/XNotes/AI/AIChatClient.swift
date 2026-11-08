@@ -22,7 +22,8 @@ struct AICompletionRequest {
 
     func urlRequest() throws -> URLRequest {
         try provider.validate()
-        guard !model.isEmpty, !messages.isEmpty, messages.count <= 40 else { throw AIChatError.contextLimit }
+        guard provider.models.contains(model) else { throw AIChatError.chooseModel }
+        guard !messages.isEmpty, messages.count <= 40 else { throw AIChatError.contextLimit }
         guard (256...131072).contains(maxTokens), instructions.utf16.count <= 4000 else { throw AISettingsError.invalidAnswerSettings }
         var request = URLRequest(url: try AIEndpoints.completion(provider.endpoint))
         request.httpMethod = "POST"
@@ -42,7 +43,8 @@ struct AICompletionRequest {
         if !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             context.insert(["role": "system", "content": instructions], at: 0)
         }
-        var body: [String: Any] = ["model": model, "stream": true, "max_tokens": maxTokens, "messages": context]
+        let tokenField = request.url?.host?.lowercased() == "api.openai.com" ? "max_completion_tokens" : "max_tokens"
+        var body: [String: Any] = ["model": model, "stream": true, tokenField: maxTokens, "messages": context]
         if effort != .providerDefault {
             let enabled = effort != .off
             var format = provider.thinkingFormat
@@ -158,7 +160,23 @@ enum AIChatClient {
         do {
             let (bytes, response) = try await session.bytes(for: request)
             guard let response = response as? HTTPURLResponse else { throw AIChatError.invalidStream }
-            guard (200...299).contains(response.statusCode) else { throw AIChatError.http(response.statusCode) }
+            guard (200...299).contains(response.statusCode) else {
+                var data = Data()
+                do {
+                    for try await byte in bytes {
+                        try Task.checkCancellation()
+                        guard data.count < AIProviderFailure.byteLimit else { break }
+                        data.append(byte)
+                    }
+                } catch {
+                    if Task.isCancelled || error is CancellationError { throw CancellationError() }
+                    // Retain the known HTTP status if reading the error body fails.
+                }
+                try Task.checkCancellation()
+                let detail = AIProviderFailure.detail(data, key: input.provider.key)
+                if !detail.isEmpty { throw AIChatError.httpDetail(response.statusCode, detail) }
+                throw AIChatError.http(response.statusCode)
+            }
             var decoder = AIStreamDecoder(maxTokens: input.maxTokens)
             for try await byte in bytes {
                 try Task.checkCancellation()

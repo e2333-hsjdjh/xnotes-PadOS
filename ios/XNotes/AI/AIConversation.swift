@@ -59,7 +59,7 @@ struct AIConversation: Codable, Identifiable, Equatable {
 
 enum AIChatError: LocalizedError {
     case chooseModel, emptyQuestion, contextLimit, invalidStream, incompleteStream, emptyAnswer
-    case responseLimit, historyLimit, toolsUnavailable, saveFailed, corruptHistory, historyUnavailable, connection, http(Int)
+    case responseLimit, historyLimit, toolsUnavailable, saveFailed, corruptHistory, historyUnavailable, connection, http(Int), httpDetail(Int, String)
     var errorDescription: String? {
         switch self {
         case .chooseModel: String(localized: "Choose an available provider and model before sending.")
@@ -75,6 +75,7 @@ enum AIChatError: LocalizedError {
         case .corruptHistory: String(localized: "A conversation could not be read. Its file was kept.")
         case .historyUnavailable: String(localized: "Conversation storage is unavailable. No request was sent.")
         case .connection: String(localized: "The AI request failed. Check the provider and connection.")
+        case .httpDetail(let code, let detail): String(format: String(localized: "AI request failed (HTTP %d): %@"), code, detail)
         case .http(let code): String(format: String(localized: "AI request failed (HTTP %d)."), code)
         }
     }
