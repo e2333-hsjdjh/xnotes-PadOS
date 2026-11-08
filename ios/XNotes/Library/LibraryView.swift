@@ -11,6 +11,7 @@ struct LibraryView: View {
     let aiSessions: AISessions
     @State private var showingAI = false
     @State private var openingAIConversationID: UUID?
+    @State private var openingAIDocumentID: UUID?
     @State private var activeAIConversationID: UUID?
     @State private var screenshotForAI: AIScreenshotRequest?
     @State private var pendingAIConversationID: UUID?
@@ -163,7 +164,7 @@ struct LibraryView: View {
             }
         }
         .sheet(isPresented: $showingAI, onDismiss: { aiSessions.releaseEmpty(activeAIConversationID) }) {
-            AIChatView(sessions: aiSessions, settings: aiSettings, initialConversationID: openingAIConversationID,
+            AIChatView(sessions: aiSessions, settings: aiSettings, initialConversationID: openingAIConversationID, sourceDocumentID: openingAIDocumentID,
                        selectionChanged: { activeAIConversationID = $0 })
         }
         .sheet(item: $screenshotForAI, onDismiss: {
@@ -173,7 +174,10 @@ struct LibraryView: View {
                 showingAI = true
             }
         }) { request in
-            AIScreenshotPreview(request: request, sessions: aiSessions) { pendingAIConversationID = $0 }
+            AIScreenshotPreview(request: request, sessions: aiSessions) {
+                openingAIDocumentID = request.documentID
+                pendingAIConversationID = $0
+            }
         }
         .sheet(isPresented: $showingAISettings) { AISettingsView(store: aiSettings) }
         .onAppear { maintainStorage() }
@@ -271,7 +275,7 @@ struct LibraryView: View {
                                 }
                             }
                         }
-                        Button("AI", systemImage: "sparkles") { openingAIConversationID = nil; showingAI = true }
+                        Button("AI", systemImage: "sparkles") { openingAIConversationID = nil; openingAIDocumentID = nil; showingAI = true }
                         Button("AI settings", systemImage: "sparkles") { showingAISettings = true }
                         Picker("Appearance", selection: $appearance) {
                             Text("System").tag("system")
@@ -481,7 +485,11 @@ struct LibraryView: View {
 
     private func editor(_ notebook: Notebook, in pane: DocumentPane) -> some View {
         let shared = panes.first(where: { $0.documentID == notebook.id })?.id != pane.id
-        return NotebookEditor(notebook: notebook, library: library, readOnly: shared, captureAI: { page, original, canvas, dark in
+        return NotebookEditor(notebook: notebook, library: library, readOnly: shared, openAI: {
+            openingAIDocumentID = notebook.id
+            openingAIConversationID = nil
+            showingAI = true
+        }, captureAI: { page, original, canvas, dark in
             do {
                 let image = try NotebookPageDrawing.render(page, original: original, longestEdge: CGFloat(AIImagePreparation.longestEdge), canvas: canvas, dark: dark)
                 guard let png = image.pngData() else { throw AIImageError.invalid }

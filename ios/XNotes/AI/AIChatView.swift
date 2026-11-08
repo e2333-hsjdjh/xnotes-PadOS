@@ -13,13 +13,15 @@ struct AIChatView: View {
     @State private var pickerTickets: Set<AIImageImportTicket> = []
     @State private var error: String?
 
-    init(sessions: AISessions, settings: AIConfigurationStore, initialConversationID: UUID? = nil, selectionChanged: @escaping (UUID?) -> Void = { _ in }) {
+    init(sessions: AISessions, settings: AIConfigurationStore, initialConversationID: UUID? = nil, sourceDocumentID: UUID? = nil, selectionChanged: @escaping (UUID?) -> Void = { _ in }) {
         self.sessions = sessions
         self.settings = settings
+        self.sourceDocumentID = sourceDocumentID
         self.selectionChanged = selectionChanged
         _activeID = State(initialValue: initialConversationID)
     }
 
+    let sourceDocumentID: UUID?
     let selectionChanged: (UUID?) -> Void
 
     private var conversation: AIConversation? { sessions.conversation(activeID) }
@@ -80,7 +82,7 @@ struct AIChatView: View {
             }
             .sheet(isPresented: $showingSettings) { AISettingsView(store: settings) }
             .sheet(isPresented: $showingHistory) {
-                AIHistoryView(sessions: sessions, retentionDays: retentionDays) { id in
+                AIHistoryView(sessions: sessions, retentionDays: retentionDays, sourceDocumentID: sourceDocumentID) { id in
                     sessions.releaseEmpty(activeID)
                     activeID = id
                 }
@@ -213,7 +215,7 @@ struct AIChatView: View {
 
     private func newConversation() {
         sessions.releaseEmpty(activeID)
-        activeID = sessions.newConversation()
+        activeID = sessions.newConversation(sourceDocumentID: sourceDocumentID)
     }
 
     private func perform(_ action: () throws -> Void) {

@@ -3,6 +3,8 @@ import SwiftUI
 struct AIHistoryView: View {
     @Bindable var sessions: AISessions
     let retentionDays: Int
+    var sourceDocumentID: UUID? = nil
+    @State private var showAll = false
     let select: (UUID) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var trash = false
@@ -14,10 +16,7 @@ struct AIHistoryView: View {
 
     private var visible: [AIConversation] {
         sessions.conversations.filter { conversation in
-            !conversation.turns.isEmpty && (conversation.trashedAt != nil) == trash &&
-            (query.isEmpty || conversation.title.localizedStandardContains(query) || conversation.turns.contains {
-                $0.question.localizedStandardContains(query) || $0.answer.localizedStandardContains(query)
-            })
+            conversation.appearsInHistory(query: query, documentID: showAll ? nil : sourceDocumentID, trash: trash)
         }.sorted { $0.updated > $1.updated }
     }
 
@@ -60,6 +59,9 @@ struct AIHistoryView: View {
             .navigationTitle(trash ? Text("AI trash") : Text("Conversation history"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .topBarLeading) {
+                    if sourceDocumentID != nil { Toggle("All conversations", isOn: $showAll) }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(trash ? "Conversation history" : "AI trash") { trash.toggle(); query = "" }
                 }

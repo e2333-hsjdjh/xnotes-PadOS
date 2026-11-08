@@ -378,3 +378,5 @@
 "Resolve or discard the failed image import before sending." = "请重新导入图片或放弃失败的导入，再发送问题。";
 
 "The conversation exceeds the 64 MiB storage limit. Existing files were kept." = "会话超过 64 MiB 存储上限，已保留已有文件。";
+
+"All conversations" = "全部会话";

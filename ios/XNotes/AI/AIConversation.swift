@@ -34,6 +34,14 @@ struct AIConversation: Codable, Identifiable, Equatable {
     var effort: AIThinkingEffort?
     var trashedAt: Date?
 
+    func appearsInHistory(query: String, documentID: UUID?, trash: Bool) -> Bool {
+        guard !turns.isEmpty, (trashedAt != nil) == trash else { return false }
+        if let documentID, sourceDocumentID != documentID && !(relatedDocumentIDs ?? []).contains(documentID) { return false }
+        return query.isEmpty || title.localizedStandardContains(query) || turns.contains {
+            $0.question.localizedStandardContains(query) || $0.answer.localizedStandardContains(query)
+        }
+    }
+
     var isRunning: Bool { turns.last?.status == .generating && trashedAt == nil }
 
     func validate(decodingImages: Bool = false) throws {

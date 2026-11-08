@@ -60,6 +60,12 @@ enum AIImageRegression {
         precondition(reopened.conversation(id)?.turns[0].images?.first?.png == image.png)
         precondition(reopened.conversation(id)?.sourceDocumentID == documentA)
         precondition(reopened.conversation(id)?.draftImages == nil)
+        let associated = sessions.conversation(id)!
+        precondition(associated.appearsInHistory(query: "Image answer", documentID: documentA, trash: false))
+        precondition(associated.appearsInHistory(query: "", documentID: documentB, trash: false))
+        precondition(!associated.appearsInHistory(query: "", documentID: UUID(), trash: false))
+        precondition(!associated.appearsInHistory(query: "absent words", documentID: nil, trash: false))
+        precondition(!associated.appearsInHistory(query: "", documentID: documentA, trash: true))
         let oldPicker = sessions.beginImageSelection(id)!
         sessions.updateDraft(id, text: "Another question")
         try sessions.send(id, configuration: config)
