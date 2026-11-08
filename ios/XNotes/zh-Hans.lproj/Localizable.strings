@@ -380,3 +380,5 @@
 "The conversation exceeds the 64 MiB storage limit. Existing files were kept." = "会话超过 64 MiB 存储上限，已保留已有文件。";
 
 "All conversations" = "全部会话";
+
+"Copy code" = "复制代码";

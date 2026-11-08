@@ -42,6 +42,7 @@ xcrun --sdk iphonesimulator swiftc -target arm64-apple-ios17.0-simulator \
     "$repo_root/ios/XNotes/App/UITokens.swift" \
     "$repo_root/ios/Tests/AISettingsRegression.swift" \
     "$repo_root/ios/Tests/AIChatRegression.swift" \
+    "$repo_root/ios/Tests/AIMarkdownRegression.swift" \
     "$repo_root/ios/Tests/AIImageRegression.swift" \
     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker "$test_root/SimulatedEntitlements.plist" \
     -o "$bundle_path/Regression"
@@ -54,3 +55,4 @@ rg -q '^PASS AI settings native light and dark screenshots' "$test_root/Result.l
 rg -q '^PASS AI chat and history native light and dark screenshots' "$test_root/Result.log"
 rg -q '^PASS AI images orientation' "$test_root/Result.log"
 rg -q '^PASS AI image attachments and screenshot preview native screenshots' "$test_root/Result.log"
+rg -q '^PASS Markdown headings' "$test_root/Result.log"

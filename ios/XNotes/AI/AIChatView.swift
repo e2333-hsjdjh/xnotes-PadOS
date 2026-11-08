@@ -196,7 +196,7 @@ struct AIChatView: View {
             if !turn.question.isEmpty { Text(verbatim: turn.question).textSelection(.enabled) }
             Divider()
             Text("AI").bold()
-            if !turn.answer.isEmpty { Text(markdown(turn.answer)).textSelection(.enabled) }
+            if !turn.answer.isEmpty { AIMarkdownView(source: turn.answer) }
             if turn.status == .generating {
                 HStack { ProgressView(); Text(turn.phase.label) }
             } else if turn.status != .completed { Text(turn.status.label).foregroundStyle(UITokens.secondaryText) }
@@ -207,10 +207,6 @@ struct AIChatView: View {
             }
         }
         .padding(.vertical)
-    }
-
-    private func markdown(_ source: String) -> AttributedString {
-        (try? AttributedString(markdown: source, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(source)
     }
 
     private func newConversation() {

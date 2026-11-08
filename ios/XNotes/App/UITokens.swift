@@ -2,6 +2,8 @@ import SwiftUI
 
 /// Shared native layout values; do not scatter touch-target dimensions across screens.
 enum UITokens {
+    static let markdownGap: CGFloat = 8
+    static let markdownIndent: CGFloat = 16
     static let noSpacing: CGFloat = 0
     static let hairline: CGFloat = 1
     static let overlayOutline: CGFloat = 3

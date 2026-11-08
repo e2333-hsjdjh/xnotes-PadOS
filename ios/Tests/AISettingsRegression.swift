@@ -168,6 +168,7 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
         Task { @MainActor in
             do {
                 try await AISettingsRegression.run()
+                AIMarkdownRegression.run()
                 try await AIChatRegression.run()
                 try await AIImageRegression.run()
                 if let window { try await snapshots(window: window) }
@@ -213,7 +214,7 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
     let history = AIHistoryStore(directory: directory.appending(path: "History"))
     var record = AIConversation(title: "学习笔记")
     var turn = AITurn(question: "请解释这个公式的含义。", model: config.defaultModel!, effort: .providerDefault)
-    turn.answer = "**结论**：x^2 + y^2 = r^2 表示以原点为圆心、半径为 r 的圆。\n\n其中 x、y 为坐标，r 是半径。"
+    turn.answer = AIMarkdownRegression.sample
     turn.status = .completed
     var imagePage = NotePage()
     imagePage.text = "截图内容：x^2 + y^2 = r^2"
