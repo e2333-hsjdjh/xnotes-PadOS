@@ -41,6 +41,7 @@ xcrun --sdk iphonesimulator swiftc -target arm64-apple-ios17.0-simulator \
     "$repo_root"/ios/XNotes/Editor/{NotebookPageDrawing,NotebookCoverDrawing,PaperPatternDrawing,MusicPaperDrawing,StudyPaperDrawing,IsometricPaperDrawing,ScientificPaperDrawing,PDFTextMarkupDrawing,PageImageCrop,PDFTextSelection,PDFNavigation,DocumentHistory,NotebookPDFExport,PDFExportLinks}.swift \
     "$repo_root/ios/XNotes/App/UITokens.swift" \
     "$repo_root/ios/Tests/AISettingsRegression.swift" \
+    "$repo_root/ios/Tests/AIModelKindsRegression.swift" \
     "$repo_root/ios/Tests/AIChatRegression.swift" \
     "$repo_root/ios/Tests/AIMarkdownRegression.swift" \
     "$repo_root/ios/Tests/PDFSelectionRegression.swift" \
@@ -63,3 +64,5 @@ rg -q '^PASS PDF free selection' "$test_root/Result.log"
 rg -q '^PASS PDF exported URL' "$test_root/Result.log"
 
 rg -q '^PASS workspace canvas solo' "$test_root/Result.log"
+
+rg -q '^PASS AI chat and image model groups' "$test_root/Result.log"

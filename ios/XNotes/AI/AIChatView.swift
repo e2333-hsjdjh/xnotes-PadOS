@@ -127,7 +127,7 @@ struct AIChatView: View {
             }
             HStack {
                 Menu {
-                    ForEach(settings.configuration.providers) { provider in
+                    ForEach(settings.configuration.chatProviders) { provider in
                         Section(provider.label) {
                             ForEach(provider.models, id: \.self) { model in
                                 Button(model) { perform { try sessions.setModel(conversation.id, choice: AIModelChoice(providerID: provider.id, model: model)) } }
@@ -140,7 +140,7 @@ struct AIChatView: View {
                     else { Text("Choose a model") }
                 }
                 .frame(minHeight: UITokens.minTouchTarget)
-                .disabled(conversation.isRunning || settings.configuration.providers.isEmpty)
+                .disabled(conversation.isRunning || settings.configuration.chatProviders.isEmpty)
                 Menu {
                     Button("Follow default") { perform { try sessions.setEffort(conversation.id, effort: nil) } }
                     ForEach(AIThinkingEffort.allCases, id: \.self) { effort in

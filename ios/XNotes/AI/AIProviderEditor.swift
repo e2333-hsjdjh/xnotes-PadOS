@@ -4,6 +4,7 @@ struct AIProviderEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft: AIProvider
     @State private var model = ""
+    @State private var imageModel = ""
     @State private var error: String?
     @State private var fetchTask: Task<Void, Never>?
     @State private var fetched: ModelResults?
@@ -41,21 +42,9 @@ struct AIProviderEditor: View {
                         }
                     }
                     .disabled(fetchTask != nil)
+                    modelSection(image: false)
+                    modelSection(image: true)
                     Section {
-                        ForEach(draft.models, id: \.self) { name in
-                            Text(verbatim: name)
-                                .swipeActions { Button("Delete", role: .destructive) { draft.models.removeAll { $0 == name } } }
-                        }
-                        HStack {
-                            TextField("Model ID", text: $model)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .onSubmit(addModel)
-                            Button("Add model", systemImage: "plus", action: addModel)
-                                .labelStyle(.iconOnly)
-                                .frame(minWidth: UITokens.minTouchTarget, minHeight: UITokens.minTouchTarget)
-                                .disabled(model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
                         if fetchTask != nil {
                             ProgressView("Fetching models…")
                             Button("Cancel model request") { fetchTask?.cancel(); fetchTask = nil }
@@ -63,8 +52,6 @@ struct AIProviderEditor: View {
                             Button("Fetch from provider", systemImage: "arrow.down") { fetchModels() }
                                 .frame(minHeight: UITokens.minTouchTarget)
                         }
-                    } header: {
-                        Text("Saved models: \(draft.models.count) / 200")
                     } footer: {
                         Text("Fetching sends your API key only to the configured provider's models endpoint. Redirects are rejected.")
                     }
@@ -99,8 +86,12 @@ struct AIProviderEditor: View {
                 }
             }
             .sheet(item: $fetched) { result in
-                AIModelSelection(models: result.models.filter { !draft.models.contains($0) }, capacity: 200 - draft.models.count) { choices in
-                    draft.models = AIProvider.uniqueModels(draft.models + choices)
+                AIModelSelection(models: result.models, provider: draft) { chat, images in
+                    var updated = draft
+                    updated.models = AIProvider.uniqueModels(draft.models + chat)
+                    updated.imageModels = AIProvider.uniqueModels(draft.imageModels + images)
+                    try updated.validate()
+                    draft = updated
                 }
             }
             .confirmationDialog("Delete this provider?", isPresented: $confirmDelete, titleVisibility: .visible) {
@@ -112,14 +103,44 @@ struct AIProviderEditor: View {
         }
     }
 
-    private func addModel() {
-        let clean = model.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func modelSection(image: Bool) -> some View {
+        let names = image ? draft.imageModels : draft.models
+        let entry = image ? $imageModel : $model
+        return Section {
+            ForEach(names, id: \.self) { name in
+                Text(verbatim: name)
+                    .swipeActions {
+                        Button("Delete", role: .destructive) {
+                            if image { draft.imageModels.removeAll { $0 == name } }
+                            else { draft.models.removeAll { $0 == name } }
+                        }
+                    }
+            }
+            HStack {
+                TextField("Model ID", text: entry)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .onSubmit { addModel(image: image) }
+                Button("Add model", systemImage: "plus") { addModel(image: image) }
+                    .labelStyle(.iconOnly)
+                    .frame(minWidth: UITokens.minTouchTarget, minHeight: UITokens.minTouchTarget)
+                    .disabled(entry.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        } header: {
+            Text(image ? "Image models" : "Chat models")
+        } footer: {
+            Text("Saved models: \(names.count) / 200")
+        }
+    }
+
+    private func addModel(image: Bool) {
+        let clean = (image ? imageModel : model).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
         guard clean.utf16.count <= 200 else { error = AISettingsError.invalidModels.localizedDescription; return }
-        let updated = AIProvider.uniqueModels(draft.models + [clean])
+        let updated = AIProvider.uniqueModels((image ? draft.imageModels : draft.models) + [clean])
         guard updated.count <= 200 else { error = AISettingsError.tooManyModels.localizedDescription; return }
-        draft.models = updated
-        model = ""
+        if image { draft.imageModels = updated; imageModel = "" }
+        else { draft.models = updated; model = "" }
         error = nil
     }
 
@@ -151,30 +172,43 @@ struct AIProviderEditor: View {
 private struct AIModelSelection: View {
     @Environment(\.dismiss) private var dismiss
     let models: [String]
-    let capacity: Int
-    let accept: ([String]) -> Void
+    let provider: AIProvider
+    let accept: ([String], [String]) throws -> Void
     @State private var selected: Set<String> = []
     @State private var query = ""
     @State private var error: String?
 
-    private var filtered: [String] { models.filter { query.isEmpty || $0.localizedStandardContains(query) } }
+    private var available: [String] {
+        models.filter { model in
+            !(AIModelKind.guess(model) == .image ? provider.imageModels : provider.models).contains(model)
+        }
+    }
+    private var filtered: [String] { available.filter { query.isEmpty || $0.localizedStandardContains(query) } }
+    private func fits(_ choices: Set<String>) -> Bool {
+        let images = choices.filter { AIModelKind.guess($0) == .image }.count
+        return provider.imageModels.count + images <= 200 && provider.models.count + choices.count - images <= 200
+    }
+    private func select(_ choices: Set<String>) {
+        guard fits(choices) else { error = AISettingsError.tooManyModels.localizedDescription; return }
+        selected = choices
+        error = nil
+    }
 
     var body: some View {
         NavigationStack {
             List {
                 Group {
                     if let error { Text(error) }
-                    if models.isEmpty { Text("No new models were returned.") }
-                    ForEach(filtered, id: \.self) { model in
-                        Toggle(model, isOn: Binding(get: { selected.contains(model) }, set: { enabled in
-                            if enabled {
-                                guard selected.count < capacity else { error = AISettingsError.tooManyModels.localizedDescription; return }
-                                selected.insert(model)
-                            } else { selected.remove(model) }
-                            error = nil
-                        }))
-                        .tint(.primary)
-                    }
+                    if available.isEmpty { Text("No new models were returned.") }
+                    Section {
+                        modelRows(.chat)
+                    } header: { Text("Chat models") }
+                    Section {
+                        modelRows(.image)
+                    } header: { Text("Image models") }
+                    DisclosureGroup("Other models (added to chat)") { modelRows(.other) }
+                    Text("Groups are guessed from model names. You can enter any model ID in either list manually.")
+                        .foregroundStyle(UITokens.secondaryText)
                 }
                 .aiSettingsRows()
             }
@@ -185,20 +219,30 @@ private struct AIModelSelection: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add selected models") {
-                        guard selected.count <= capacity else { error = AISettingsError.tooManyModels.localizedDescription; return }
-                        accept(models.filter { selected.contains($0) })
-                        dismiss()
+                        guard fits(selected) else { error = AISettingsError.tooManyModels.localizedDescription; return }
+                        let choices = available.filter { selected.contains($0) }
+                        do {
+                            try accept(choices.filter { AIModelKind.guess($0) != .image }, choices.filter { AIModelKind.guess($0) == .image })
+                            dismiss()
+                        } catch { self.error = error.localizedDescription }
                     }
                     .disabled(selected.isEmpty)
                 }
                 ToolbarItem(placement: .bottomBar) {
-                    Button("Select visible models") {
-                        let updated = selected.union(filtered)
-                        guard updated.count <= capacity else { error = AISettingsError.tooManyModels.localizedDescription; return }
-                        selected = updated
-                    }
+                    Button("Select visible models") { select(selected.union(filtered)) }
                 }
             }
+        }
+    }
+
+    private func modelRows(_ kind: AIModelKind) -> some View {
+        ForEach(filtered.filter { AIModelKind.guess($0) == kind }, id: \.self) { model in
+            Toggle(model, isOn: Binding(get: { selected.contains(model) }, set: { enabled in
+                var choices = selected
+                if enabled { choices.insert(model) } else { choices.remove(model) }
+                select(choices)
+            }))
+            .tint(.primary)
         }
     }
 }

@@ -24,7 +24,7 @@ struct AISettingsView: View {
                             Button {
                                 editing = provider
                             } label: {
-                                LabeledContent(provider.label, value: String(localized: "Models: \(provider.models.count)"))
+                                LabeledContent(provider.label, value: String(localized: "Models: \(provider.models.count + provider.imageModels.count)"))
                                     .foregroundStyle(.primary)
                                     .frame(minHeight: UITokens.minTouchTarget)
                             }
@@ -33,13 +33,13 @@ struct AISettingsView: View {
                             .frame(minHeight: UITokens.minTouchTarget)
                             .disabled(draft.providers.count >= 20)
                     } header: { Text("Providers") } footer: {
-                        Text("Only Chat Completions providers are supported. Model lists are fetched only when you request them.")
+                        Text("Chat uses Chat Completions; image generation uses Images. Model lists are fetched only when you request them.")
                     }
                     .disabled(store.loadIssue != nil)
                     Section("Answer defaults") {
                         Picker("Default model", selection: $draft.defaultModel) {
                             Text("Choose a model").tag(Optional<AIModelChoice>.none)
-                            ForEach(draft.providers) { provider in
+                            ForEach(draft.chatProviders) { provider in
                                 Section(provider.label) {
                                     ForEach(provider.models, id: \.self) { model in
                                         Text(model).tag(Optional(AIModelChoice(providerID: provider.id, model: model)))
@@ -57,6 +57,20 @@ struct AISettingsView: View {
                         }
                         Text("Allowed output tokens: 256–131072.")
                             .foregroundStyle(UITokens.secondaryText)
+                    }
+                    .disabled(store.loadIssue != nil)
+                    Section("Image generation") {
+                        Picker("Default image model", selection: $draft.defaultImageModel) {
+                            Text("Do not use").tag(Optional<AIModelChoice>.none)
+                            ForEach(draft.imageProviders) { provider in
+                                Section(provider.label) {
+                                    ForEach(provider.imageModels, id: \.self) { model in
+                                        Text(model).tag(Optional(AIModelChoice(providerID: provider.id, model: model)))
+                                    }
+                                }
+                            }
+                        }
+                        Text("Image generation uses the selected image provider's own API key.")
                     }
                     .disabled(store.loadIssue != nil)
                     Section("Custom instructions") {

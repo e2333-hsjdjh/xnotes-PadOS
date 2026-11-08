@@ -169,6 +169,7 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
         Task { @MainActor in
             do {
                 try await AISettingsRegression.run()
+                try AIModelKindsRegression.run()
                 AIMarkdownRegression.run()
                 try PDFSelectionRegression.run()
                 try PDFExportLinkRegression.run()
@@ -193,9 +194,10 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
     let directory = output.appending(path: "snapshot-settings")
     defer { try? FileManager.default.removeItem(at: directory) }
     let store = AIConfigurationStore(directory: directory, keys: FixedKey())
-    let provider = AIProvider(name: "Example provider", endpoint: "https://provider.example/v1", key: "fake-snapshot-key", models: ["example-chat"])
+    let provider = AIProvider(name: "Example provider", endpoint: "https://provider.example/v1", key: "fake-snapshot-key", models: ["example-chat"], imageModels: ["example-image"])
     var config = AIConfiguration(providers: [provider])
     config.reconcileDefault()
+    config.defaultImageModel = .init(providerID: provider.id, model: "example-image")
     try store.save(config)
     for dark in [false, true] {
         for editor in [false, true] {

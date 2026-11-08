@@ -391,3 +391,16 @@
 
 "The document is no longer available." = "文档已不可用。";
 "Canvases are for drawing and sketches. Open them on their own, outside split view." = "画布用于画画与草稿，请单独打开，不支持分屏。";
+
+"Chat uses Chat Completions; image generation uses Images. Model lists are fetched only when you request them." = "聊天使用 Chat Completions 接口，生图使用 Images 接口。只有点击获取时才请求模型列表。";
+"Image generation" = "图像生成";
+"Default image model" = "默认生图模型";
+"Do not use" = "不使用";
+"Image generation uses the selected image provider's own API key." = "生图请求使用所选生图供应商自己的 API 密钥。";
+"Chat models" = "聊天模型";
+"Image models" = "生图模型";
+"Other models (added to chat)" = "其他模型（加入聊天列表）";
+"Groups are guessed from model names. You can enter any model ID in either list manually." = "分类仅根据模型名称推测，可在任一列表手动填写模型 ID。";
+
+"Add at least one chat or image model ID, up to 200 characters each." = "请至少添加一个聊天或生图模型 ID，每个不超过 200 个字符。";
+"Each model group can contain at most 200 models. Nothing was truncated." = "每组最多保存 200 个模型，未截断任何模型。";
