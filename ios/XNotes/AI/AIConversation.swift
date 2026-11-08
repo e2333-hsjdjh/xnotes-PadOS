@@ -5,7 +5,7 @@ enum AITurnStatus: String, Codable {
 }
 
 enum AIStreamPhase: String, Codable {
-    case waiting, thinking, answering
+    case waiting, thinking, answering, retryingWithoutThinking
 }
 
 struct AITurn: Codable, Identifiable, Equatable {
@@ -16,6 +16,7 @@ struct AITurn: Codable, Identifiable, Equatable {
     var status = AITurnStatus.generating
     var phase = AIStreamPhase.waiting
     var error: String?
+    var thinkingDropped: Bool?
     let model: AIModelChoice
     let effort: AIThinkingEffort
 }

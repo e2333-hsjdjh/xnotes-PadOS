@@ -200,6 +200,10 @@ struct AIChatView: View {
             if turn.status == .generating {
                 HStack { ProgressView(); Text(turn.phase.label) }
             } else if turn.status != .completed { Text(turn.status.label).foregroundStyle(UITokens.secondaryText) }
+            if turn.thinkingDropped == true {
+                Text("The model did not accept the selected thinking setting. This request used the provider default.")
+                    .foregroundStyle(UITokens.secondaryText)
+            }
             if let error = turn.error { Text(error).foregroundStyle(UITokens.secondaryText) }
             if !turn.answer.isEmpty {
                 Button("Copy answer", systemImage: "doc.on.doc") { UIPasteboard.general.string = turn.answer }
@@ -222,6 +226,7 @@ struct AIChatView: View {
 extension AIStreamPhase {
     var label: LocalizedStringKey {
         switch self {
+        case .retryingWithoutThinking: "Requesting without the rejected thinking setting…"
         case .waiting: "Waiting for provider…"
         case .thinking: "Provider is thinking…"
         case .answering: "Receiving answer…"

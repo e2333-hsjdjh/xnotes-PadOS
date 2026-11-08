@@ -171,6 +171,7 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
                 try await AISettingsRegression.run()
                 try AIModelKindsRegression.run()
                 try await AIHTTPCompatibilityRegression.run()
+                try await AIThinkingFallbackRegression.run()
                 AIMarkdownRegression.run()
                 try PDFSelectionRegression.run()
                 try PDFExportLinkRegression.run()
@@ -249,6 +250,28 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
             }
             try image.pngData()!.write(to: output.appending(path: "ai-\(transcript ? "chat" : "history")-\(dark ? "dark" : "light").png"))
         }
+    }
+
+    var fallback = AIConversation(title: "思考参数回退")
+    var fallbackTurn = AITurn(question: "请解释正弦定理。", model: config.defaultModel!, effort: .high)
+    fallbackTurn.answer = "正弦定理说明：三角形各边与其对角的正弦之比相等。"
+    fallbackTurn.status = .completed
+    fallbackTurn.thinkingDropped = true
+    fallback.turns = [fallbackTurn]
+    try history.save(fallback)
+    let fallbackSessions = AISessions(history: history)
+    for dark in [false, true] {
+        let host = UIHostingController(rootView: AIChatView(sessions: fallbackSessions, settings: store, initialConversationID: fallback.id).environment(\.colorScheme, dark ? .dark : .light))
+        host.overrideUserInterfaceStyle = dark ? .dark : .light
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        try await Task.sleep(for: .milliseconds(500))
+        host.view.layoutIfNeeded()
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1
+        let image = UIGraphicsImageRenderer(bounds: window.bounds, format: format).image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        try image.pngData()!.write(to: output.appending(path: "ai-thinking-fallback-\(dark ? "dark" : "light").png"))
     }
 
     let request = AIScreenshotRequest(image: PageImage(data: screenshot.pngData()!, frame: CGRect(origin: .zero, size: screenshot.size)),

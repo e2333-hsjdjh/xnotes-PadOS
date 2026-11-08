@@ -406,3 +406,6 @@
 "Each model group can contain at most 200 models. Nothing was truncated." = "每组最多保存 200 个模型，未截断任何模型。";
 
 "AI request failed (HTTP %d): %@" = "AI 请求失败（HTTP %d）：%@";
+
+"The model did not accept the selected thinking setting. This request used the provider default." = "此模型未接受所选思考设置，本轮请求使用供应商默认设置。";
+"Requesting without the rejected thinking setting…" = "正在使用供应商默认思考设置请求…";

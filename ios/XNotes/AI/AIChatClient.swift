@@ -1,7 +1,7 @@
 import Foundation
 
 enum AIStreamEvent: Equatable {
-    case text(String), thinking
+    case text(String), thinking, thinkingFallback
 }
 
 enum AIStreamFinish { case completed, limited, filtered }
@@ -20,7 +20,7 @@ struct AICompletionRequest {
     let instructions: String
     let messages: [AIChatMessage]
 
-    func urlRequest() throws -> URLRequest {
+    func urlRequest(includeThinking: Bool = true) throws -> URLRequest {
         try provider.validate()
         guard provider.models.contains(model) else { throw AIChatError.chooseModel }
         guard !messages.isEmpty, messages.count <= 40 else { throw AIChatError.contextLimit }
@@ -45,16 +45,9 @@ struct AICompletionRequest {
         }
         let tokenField = request.url?.host?.lowercased() == "api.openai.com" ? "max_completion_tokens" : "max_tokens"
         var body: [String: Any] = ["model": model, "stream": true, tokenField: maxTokens, "messages": context]
-        if effort != .providerDefault {
+        if includeThinking && effort != .providerDefault {
             let enabled = effort != .off
-            var format = provider.thinkingFormat
-            if format == .automatic {
-                let host = request.url?.host?.lowercased() ?? ""
-                if host == "deepseek.com" || host.hasSuffix(".deepseek.com") { format = .deepSeek }
-                else if host == "openrouter.ai" || host.hasSuffix(".openrouter.ai") { format = .openRouter }
-                else if host.contains("dashscope") { format = .qwen }
-                else { format = .openAI }
-            }
+            let format = AIThinkingPolicy.format(for: provider)
             switch format {
             case .deepSeek: body["thinking"] = ["type": enabled ? "enabled" : "disabled"]
             case .qwen: body["enable_thinking"] = enabled
@@ -148,8 +141,29 @@ struct AIStreamDecoder {
 
 enum AIChatClient {
     static func stream(_ input: AICompletionRequest, onEvent: @escaping @Sendable (AIStreamEvent) async throws -> Void,
-                       configuration: URLSessionConfiguration = .ephemeral) async throws -> AIStreamFinish {
-        let request = try input.urlRequest()
+                       configuration: URLSessionConfiguration = .ephemeral,
+                       refusals: AIThinkingRefusals = .shared) async throws -> AIStreamFinish {
+        try Task.checkCancellation()
+        if await refusals.contains(input) {
+            try await onEvent(.thinkingFallback)
+            try Task.checkCancellation()
+            return try await send(input, includeThinking: false, onEvent: onEvent, configuration: configuration)
+        }
+        do {
+            return try await send(input, includeThinking: true, onEvent: onEvent, configuration: configuration)
+        } catch let error as AIChatError where AIThinkingPolicy.isRefusal(error, input: input) {
+            try Task.checkCancellation()
+            await refusals.remember(input)
+            try await onEvent(.thinkingFallback)
+            try Task.checkCancellation()
+            return try await send(input, includeThinking: false, onEvent: onEvent, configuration: configuration)
+        }
+    }
+
+    private static func send(_ input: AICompletionRequest, includeThinking: Bool,
+                             onEvent: @escaping @Sendable (AIStreamEvent) async throws -> Void,
+                             configuration: URLSessionConfiguration) async throws -> AIStreamFinish {
+        let request = try input.urlRequest(includeThinking: includeThinking)
         configuration.urlCache = nil
         configuration.urlCredentialStorage = nil
         configuration.httpCookieStorage = nil

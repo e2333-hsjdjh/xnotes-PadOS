@@ -43,6 +43,7 @@ xcrun --sdk iphonesimulator swiftc -target arm64-apple-ios17.0-simulator \
     "$repo_root/ios/Tests/AISettingsRegression.swift" \
     "$repo_root/ios/Tests/AIModelKindsRegression.swift" \
     "$repo_root/ios/Tests/AIHTTPCompatibilityRegression.swift" \
+    "$repo_root/ios/Tests/AIThinkingFallbackRegression.swift" \
     "$repo_root/ios/Tests/AIChatRegression.swift" \
     "$repo_root/ios/Tests/AIMarkdownRegression.swift" \
     "$repo_root/ios/Tests/PDFSelectionRegression.swift" \
@@ -69,3 +70,5 @@ rg -q '^PASS workspace canvas solo' "$test_root/Result.log"
 rg -q '^PASS AI chat and image model groups' "$test_root/Result.log"
 
 rg -q '^PASS AI OpenAI token field' "$test_root/Result.log"
+
+rg -q '^PASS AI thinking refusal retry once' "$test_root/Result.log"

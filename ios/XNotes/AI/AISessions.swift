@@ -273,6 +273,9 @@ final class AISessions {
             conversation.turns[index].phase = .answering
         case .thinking:
             if conversation.turns[index].answer.isEmpty { conversation.turns[index].phase = .thinking }
+        case .thinkingFallback:
+            conversation.turns[index].thinkingDropped = true
+            conversation.turns[index].phase = .retryingWithoutThinking
         }
         publish(conversation)
         if Date().timeIntervalSince(checkpoints[id] ?? .distantPast) >= 0.5 {
