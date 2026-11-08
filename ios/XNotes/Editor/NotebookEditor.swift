@@ -370,11 +370,13 @@ struct NotebookEditor<SplitChoices: View>: View {
                 .disabled((notebook.kind == .pdf && pdf == nil) || missingPagePDF)
             }
             .frame(minWidth: UITokens.minTouchTarget, minHeight: UITokens.minTouchTarget)
-            Menu("Split view", systemImage: "rectangle.split.2x1") {
-                splitChoices()
+            if notebook.kind != .canvas {
+                Menu("Split view", systemImage: "rectangle.split.2x1") {
+                    splitChoices()
+                }
+                .frame(minWidth: UITokens.minTouchTarget, minHeight: UITokens.minTouchTarget)
+                .accessibilityIdentifier("editor.split")
             }
-            .frame(minWidth: 48, minHeight: 48)
-            .accessibilityIdentifier("editor.split")
         }
         .padding(.horizontal, 8)
     }

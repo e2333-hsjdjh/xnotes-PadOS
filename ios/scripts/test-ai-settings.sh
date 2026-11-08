@@ -45,6 +45,7 @@ xcrun --sdk iphonesimulator swiftc -target arm64-apple-ios17.0-simulator \
     "$repo_root/ios/Tests/AIMarkdownRegression.swift" \
     "$repo_root/ios/Tests/PDFSelectionRegression.swift" \
     "$repo_root/ios/Tests/PDFExportLinkRegression.swift" \
+    "$repo_root/ios/Tests/WorkspaceRegression.swift" \
     "$repo_root/ios/Tests/AIImageRegression.swift" \
     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker "$test_root/SimulatedEntitlements.plist" \
     -o "$bundle_path/Regression"
@@ -60,3 +61,5 @@ rg -q '^PASS AI image attachments and screenshot preview native screenshots' "$t
 rg -q '^PASS Markdown headings' "$test_root/Result.log"
 rg -q '^PASS PDF free selection' "$test_root/Result.log"
 rg -q '^PASS PDF exported URL' "$test_root/Result.log"
+
+rg -q '^PASS workspace canvas solo' "$test_root/Result.log"

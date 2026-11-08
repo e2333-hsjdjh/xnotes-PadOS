@@ -388,3 +388,6 @@
 "No selectable PDF text" = "此页没有可选择的 PDF 文字";
 "Touch and hold text, then drag the selection handles." = "长按文字后，拖动选择手柄调整范围。";
 "The selected page changed or the markup could not be saved." = "所选页面已变化，或无法保存文字标注。";
+
+"The document is no longer available." = "文档已不可用。";
+"Canvases are for drawing and sketches. Open them on their own, outside split view." = "画布用于画画与草稿，请单独打开，不支持分屏。";

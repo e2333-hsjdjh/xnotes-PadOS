@@ -67,7 +67,7 @@ struct LibraryView: View {
 
     private var restorableSplit: SplitWorkspace? {
         guard let saved = try? JSONDecoder().decode(SplitWorkspace.self, from: lastSplitWorkspace),
-              saved.canRestore(from: library.notebooks) else { return nil }
+              saved.documentsExist(in: library.notebooks) else { return nil }
         return saved
     }
 
@@ -468,15 +468,14 @@ struct LibraryView: View {
     }
 
     private func paneDocuments(for pane: DocumentPane) -> [Notebook] {
-        let neighbor = panes.first(where: { $0.id != pane.id })?.documentID
-        return library.notebooks.filter { $0.trashedAt == nil && ($0.kind != .canvas || $0.id != neighbor) }
+        return library.notebooks.filter { $0.trashedAt == nil && (panes.count == 1 || $0.kind != .canvas) }
             .sorted { sort.precedes($0, $1, descending: descending, size: library.documentSize) }
     }
 
     private func replace(_ pane: DocumentPane, with document: UUID?) {
-        guard let index = panes.firstIndex(where: { $0.id == pane.id }) else { return }
-        if let document, openNotebook(document) == nil { return }
-        panes[index].documentID = document
+        perform {
+            panes = try DocumentPane.replacingDocument(in: pane.id, with: document, panes: panes, notebooks: library.notebooks)
+        }
     }
 
     private func removePane(_ pane: DocumentPane) {
@@ -506,7 +505,7 @@ struct LibraryView: View {
                     openBeside(pane, documentID: notebook.id)
                 }
             }
-            ForEach(library.notebooks.filter { $0.trashedAt == nil && $0.id != notebook.id }) { other in
+            ForEach(library.notebooks.filter { $0.trashedAt == nil && $0.id != notebook.id && $0.kind != .canvas }) { other in
                 Button(other.title) { openBeside(pane, documentID: other.id) }
             }
         }
@@ -526,16 +525,12 @@ struct LibraryView: View {
     }
 
     private func restoreSplit(_ saved: SplitWorkspace) {
-        guard saved.canRestore(from: library.notebooks) else { return }
-        panes = [DocumentPane(documentID: saved.leading), DocumentPane(documentID: saved.trailing)]
+        perform { panes = try saved.restoredPanes(from: library.notebooks) }
     }
 
     private func openBeside(_ pane: DocumentPane, documentID: UUID) {
-        guard panes.contains(where: { $0.id == pane.id }) else { return }
-        if let index = panes.firstIndex(where: { $0.id != pane.id }) {
-            panes[index].documentID = documentID
-        } else {
-            panes.append(DocumentPane(documentID: documentID))
+        perform {
+            panes = try DocumentPane.openingBeside(pane.id, documentID: documentID, panes: panes, notebooks: library.notebooks)
         }
     }
 
