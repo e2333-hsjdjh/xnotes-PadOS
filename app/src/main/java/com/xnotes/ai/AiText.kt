@@ -27,6 +27,7 @@ enum class AiMsg(val zh: String) {
     SEARCH_RESPONSE_TOO_LARGE("搜索响应过大"),
     REQUEST_TOO_LARGE("截图或会话过大，请新建会话并缩小截图"),
     REQUEST_HTTP_FAILED("请求失败（HTTP %1\$d），请检查接口、密钥、模型及额度"),
+    REQUEST_HTTP_FAILED_DETAIL("请求失败（HTTP %1\$d）：%2\$s"),
     ANSWER_TOO_LONG("回答超出长度限制"),
     PROVIDER_ERROR("供应商返回错误，请检查模型配置"),
     CONNECTION_ENDED_EARLY("连接提前结束，请重试"),
@@ -91,7 +92,16 @@ enum class AiMsg(val zh: String) {
     NO_TEXT_RETURNED("模型未返回文字"),
     STOPPED_BY_USER("已主动停止生成"),
     REQUEST_FAILED("请求失败"),
-    NETWORK_ERROR("网络或响应异常，请检查配置");
+    NETWORK_ERROR("网络或响应异常，请检查配置"),
+    TEMPLATE_GEN_EMPTY("请先描述想要的模板"),
+    TEMPLATE_GEN_TOO_LONG("要求不能超过 %1\$d 个字符"),
+    TEMPLATE_GEN_FAILED("AI 多次生成的模板仍无法使用：%1\$s"),
+    CONFIG_IMAGE_PROVIDER_REQUIRED("请为图像模型选择供应商"),
+    CONFIG_IMAGE_MODEL_INVALID("图像模型名称无效"),
+    IMAGE_MODEL_REQUIRED("请先在 AI 设置中设置图像模型"),
+    IMAGE_INVALID_REPLY("图像接口未返回可用的图片"),
+    IMAGE_TOO_LARGE("生成的图片过大"),
+    THINKING_UNSUPPORTED("当前模型不支持所选的思考设置，本次按模型默认回答");
 }
 
 object AiText {

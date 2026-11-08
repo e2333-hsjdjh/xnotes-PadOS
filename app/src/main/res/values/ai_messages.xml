@@ -10,6 +10,7 @@
     <string name="ai_msg_search_response_too_large">Search response is too large</string>
     <string name="ai_msg_request_too_large">Screenshot or chat is too large. Start a new chat and use a smaller screenshot.</string>
     <string name="ai_msg_request_http_failed">Request failed (HTTP %1$d). Check the endpoint, key, model and quota.</string>
+    <string name="ai_msg_request_http_failed_detail">Request failed (HTTP %1$d): %2$s</string>
     <string name="ai_msg_answer_too_long">Answer exceeds the length limit</string>
     <string name="ai_msg_provider_error">The provider returned an error. Check the model settings.</string>
     <string name="ai_msg_connection_ended_early">Connection ended early. Try again.</string>
@@ -87,4 +88,13 @@
     <string name="ai_msg_models_response_too_large">The model list is too large</string>
     <string name="ai_msg_models_invalid_reply">The provider returned no recognisable model list</string>
     <string name="ai_msg_config_too_many_models">You can save up to %1$d models. Remove some first.</string>
+    <string name="ai_msg_template_gen_empty">Describe the template you want first</string>
+    <string name="ai_msg_template_gen_too_long">The request can be at most %1$d characters</string>
+    <string name="ai_msg_template_gen_failed">The AI still returned an unusable template after several tries: %1$s</string>
+    <string name="ai_msg_config_image_provider_required">Choose a provider for the image model</string>
+    <string name="ai_msg_config_image_model_invalid">The image model name is not valid</string>
+    <string name="ai_msg_image_model_required">Set up an image model in AI settings first</string>
+    <string name="ai_msg_image_invalid_reply">The image service returned no usable picture</string>
+    <string name="ai_msg_image_too_large">The generated picture is too large</string>
+    <string name="ai_msg_thinking_unsupported">This model does not support the chosen thinking setting; it answered with its own default</string>
 </resources>

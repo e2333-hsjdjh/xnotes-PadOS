@@ -5,6 +5,7 @@ import android.opengl.GLSurfaceView
 import android.util.AttributeSet
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.SurfaceHolder
 import com.xnotes.core.infinite.CanvasBackground
 import com.xnotes.core.infinite.CanvasViewport
 import com.xnotes.core.model.Rgba
@@ -23,16 +24,81 @@ import com.xnotes.core.model.Rgba
  * The input hooks deliberately mirror `canvas.CanvasView`'s, so the same interaction layer and the
  * same hard-won device-specific stylus handling drive either canvas.
  */
-class InfiniteCanvasView @JvmOverloads constructor(
+class InfiniteCanvasView private constructor(
     context: Context,
-    attrs: AttributeSet? = null,
+    attrs: AttributeSet?,
+    /** Kept across host changes: the interaction controller holds this same object. */
+    val viewport: CanvasViewport,
+    initialContextGen: Int,
 ) : GLSurfaceView(context, attrs) {
 
-    private val configChooser = MsaaConfigChooser()
-    private val glRenderer = GlRenderer()
+    @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) :
+        this(context, attrs, CanvasViewport(), 0)
 
-    /** The view onto the canvas. Main-thread owned; snapshotted for the GL thread by [publish]. */
-    val viewport = CanvasViewport()
+    /** Observational identity belongs to this native View, not to its retained document. */
+    val renderDiagnostics = RenderDiagnostics()
+    // Per-frame observation takes a lock and allocates on the GL thread, and nothing in a release
+    // build reads it; debuggable builds (branch tests, instrumentation) keep the full record.
+    private val glRenderer = GlRenderer(initialContextGen, renderDiagnostics.takeIf {
+        context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+    })
+    private var captureRetired = false
+    private val diagnosticCapture = lazy {
+        SurfaceCapture.forView(this).also { if (captureRetired) it.close() }
+    }
+
+    /** Explicit diagnostic copy, not a redraw. The caller owns a successful result's bitmap. */
+    fun captureSurface(callback: (SurfaceCapture.Result) -> Unit) = diagnosticCapture.value.request(callback)
+
+    private fun retireCapture() {
+        captureRetired = true
+        if (!diagnosticCapture.isInitialized()) return
+        try {
+            diagnosticCapture.value.close()
+        } catch (_: Exception) {
+            // A diagnostic client's notification must not interrupt native-host replacement.
+            // close already revoked the callback; the native completion still owns cleanup.
+            android.util.Log.w("SurfaceCapture", "Retired capture callback failed")
+        }
+    }
+
+    private val configChooser = MsaaConfigChooser()
+
+    /** True only after GLSurfaceView has synchronously stopped its old GL thread. */
+    var detachedFromWindow = false
+        private set
+
+    /**
+     * A different AndroidView host gets a fresh native View/Surface to avoid carrying old native
+     * host/clip state across a split change. Call after removing the container from its old host.
+     * Keep the scene's context generations increasing, but never reuse after-frame callbacks:
+     * those callbacks queue work on this View's now-exited GL thread.
+     */
+    fun replacementForAttach(): InfiniteCanvasView {
+        check(detachedFromWindow && !isAttachedToWindow)
+        retireCapture()
+        return InfiniteCanvasView(context, null, viewport, glRenderer.contextGen).also {
+            it.background = background
+            it.paperColor = paperColor
+            it.darkAppearance = darkAppearance
+            it.minimapVisible = minimapVisible
+            it.contentBounds = contentBounds
+            it.accent = accent
+            it.scene = scene
+            it.input = input
+            it.hover = hover
+            it.genericMotion = genericMotion
+            it.onKey = onKey
+            it.afterLayout = afterLayout
+            it.onContextReady = onContextReady
+            it.onInputLost = onInputLost
+            it.onFourFingerTap = onFourFingerTap
+            it.onTwoFingerTap = onTwoFingerTap
+            it.onThreeFingerTap = onThreeFingerTap
+            it.crossPaneTouchGate.shouldBlock = crossPaneTouchGate.shouldBlock
+            it.setEraserCursor(cursorAt, cursorRadius)
+        }
+    }
 
     var background: CanvasBackground = CanvasBackground()
         set(value) {
@@ -226,7 +292,9 @@ class InfiniteCanvasView @JvmOverloads constructor(
     fun onGlThread(work: () -> Unit) = queueEvent(work)
 
     override fun onAttachedToWindow() {
+        renderDiagnostics.attached()
         super.onAttachedToWindow()
+        detachedFromWindow = false
         // A frame count only means something next to the rate the panel can actually show.
         glRenderer.displayHz = (display?.refreshRate ?: 60f).toDouble()
     }
@@ -234,17 +302,37 @@ class InfiniteCanvasView @JvmOverloads constructor(
     var onInputLost: (() -> Unit)? = null
 
     override fun onDetachedFromWindow() {
+        renderDiagnostics.detached()
         onInputLost?.invoke()
         removeCallbacks(idleRunnable)
         super.onDetachedFromWindow()
+        detachedFromWindow = true
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        renderDiagnostics.layoutChanged(w, h)
         super.onSizeChanged(w, h, oldw, oldh)
         viewport.widthPx = w
         viewport.heightPx = h
         afterLayout?.invoke()
         publish()
+    }
+
+    override fun surfaceCreated(holder: SurfaceHolder) {
+        renderDiagnostics.surfaceCreated()
+        super.surfaceCreated(holder)
+    }
+
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        val frame = holder.surfaceFrame
+        renderDiagnostics.surfaceChanged(frame.width(), frame.height())
+        super.surfaceChanged(holder, format, width, height)
+    }
+
+    override fun surfaceDestroyed(holder: SurfaceHolder) {
+        // Observe invalidation before GLSurfaceView waits for its worker.
+        renderDiagnostics.surfaceDestroyed()
+        super.surfaceDestroyed(holder)
     }
 
     /**

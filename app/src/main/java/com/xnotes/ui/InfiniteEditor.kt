@@ -66,6 +66,7 @@ import com.xnotes.core.tools.ToolConfig
 import com.xnotes.core.tools.ToolDefaults
 import com.xnotes.core.vector.VectorMesher
 import com.xnotes.gl.CanvasScene
+import com.xnotes.gl.ImageDrawSnapshot
 import com.xnotes.gl.InfiniteCanvasView
 import com.xnotes.ui.theme.Palette
 
@@ -92,10 +93,13 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     val history = History()
 
-    val view = InfiniteCanvasView(appContext)
+    @Volatile
+    var view = InfiniteCanvasView(appContext)
+        private set
 
     /** The front buffer wet ink goes into, above [view] and transparent whenever no pen is down. */
-    val pad = com.xnotes.gl.GlWetPad(appContext)
+    var pad = com.xnotes.gl.GlWetPad(appContext)
+        private set
 
     /**
      * The two surfaces, in order. They are siblings rather than one view because the canvas needs a
@@ -108,6 +112,33 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         addView(view, android.widget.FrameLayout.LayoutParams(-1, -1))
         addView(pad, android.widget.FrameLayout.LayoutParams(-1, -1))
         addView(toolOverlay, android.widget.FrameLayout.LayoutParams(-1, -1))
+    }
+
+    /** Replace native surfaces only at a real host reattachment, keeping the editor and view state. */
+    fun surfacesForAttach(): android.widget.FrameLayout {
+        check(!surfaces.isAttachedToWindow)
+        // The first factory call has no old ancestor clip. Replacing here would also leave a
+        // never-attached GLSurfaceView's thread waiting forever for a surface.
+        if (!view.detachedFromWindow) return surfaces
+        val oldView = view
+        val oldPad = pad
+        oldPad.onSurfaceLost = null
+        recoverSurfaceInk()
+        // settleHeld may have queued a completion on the retired View. It cannot acknowledge
+        // publication on the replacement, even if its main-thread Runnable arrives late.
+        surfaceAttachGeneration++
+        awaitingPublish = false
+        surfaces.removeView(oldView)
+        surfaces.removeView(oldPad)
+        view = oldView.replacementForAttach()
+        pad = com.xnotes.gl.GlWetPad(appContext).also {
+            it.frontBuffering = oldPad.frontBuffering
+            it.lightBlackInk = oldPad.lightBlackInk
+            it.onSurfaceLost = ::recoverSurfaceInk
+        }
+        surfaces.addView(view, 0, android.widget.FrameLayout.LayoutParams(-1, -1))
+        surfaces.addView(pad, 1, android.widget.FrameLayout.LayoutParams(-1, -1))
+        return surfaces
     }
 
     val viewport: CanvasViewport get() = view.viewport
@@ -138,7 +169,8 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         devicePxPerDp = { devicePxPerDp },
         onMinimapPress = { vx, vy -> minimapTap(vx, vy) },
         onContextMenu = { vp, content, locked -> contextMenu = ContextMenuTarget(vp.x, vp.y, content, locked) },
-        hasPasteContent = { hasClipboardItems || clipboardHasImage },
+        // Asked on every touch-down: the clipboard description only, so no system paste notice.
+        hasPasteContent = { hasClipboardItems || com.xnotes.platform.SystemClipboard.mayHoldImage(appContext) },
         onToolChanged = { adoptTool(it) },
         onDoubleTap = { vp, toolType, selectedBefore -> onDoubleTap(vp, toolType, selectedBefore) },
         isEditingText = { editingLabel != null },
@@ -248,6 +280,9 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     /** The GL-side mirror of the document. Fed by [modelListener]; never reads the model itself. */
     private val scene = CanvasScene()
 
+    /** Decode ownership follows document installation, not the replaceable native surfaces. */
+    private var imageDecodeBinding: Any = Any()
+
     /** One low-priority thread decoding images, so a big photo never stalls a frame. */
     private val decodeExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
         Thread(r, "xnotes-canvas-decode").apply {
@@ -290,6 +325,12 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
             view.publish()
         }
 
+        override fun onSyncChanged(items: List<CanvasItem>) {
+            itemsRevision++
+            scene.syncChanged(items)
+            view.publish()
+        }
+
         override fun onReset() {
             itemsRevision++
             rebuildScene()
@@ -299,6 +340,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     }
 
     init {
+        scene.reset(imageDecodeBinding)
         interaction.canEditLayer = { document.layers.writable }
         view.input = { event -> beforePenInput(event); proPenInput.touch(event) { interaction.onTouch(event) } }
         view.crossPaneTouchGate.shouldBlock = { otherPenInContact() }
@@ -307,18 +349,36 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         view.hover = { beforePenInput(it); proPenInput.motion(it); interaction.onHover(it) }
         view.afterLayout = { applyInitialView() }
         view.onContextReady = { renderFailure = view.failure }
-        pad.onSurfaceLost = { endFrontInk(); settleHeld() }
+        pad.onSurfaceLost = ::recoverSurfaceInk
         view.onFourFingerTap = { toggleDebug() }
         view.minimapVisible = minimapVisible
         view.scene = scene
         // Decoding reads a file and can take tens of milliseconds, so it never runs on the render
         // thread; the finished bitmap is uploaded at the start of the next frame, which the decode
         // asks for itself, since nothing else may be drawing.
-        scene.decodeOn = { work -> decodeExecutor.execute { work.run(); view.requestRender() } }
-        scene.onOutOfMemory = { short -> view.post { outOfMemory = short } }
+        scene.decodeOn = { work ->
+            try {
+                decodeExecutor.execute {
+                    try { work.run() } finally { view.requestRender() }
+                }
+            } catch (error: Throwable) {
+                view.requestRender()
+                throw error
+            }
+        }
+        scene.onOutOfMemory = { short -> mainHandler.post { outOfMemory = short } }
         document.listener = modelListener
         // Whatever is added while this canvas records takes the recording's moment.
-        history.onPush = { command -> AudioRecording.stamp(this, command.added()) }
+        history.onPush = { command ->
+            // Nothing is stamped unless this canvas is recording; skip the bookkeeping otherwise.
+            if (AudioRecording.markFor(this) != null) {
+                val added = command.added()
+                val before = added.map { it.sync }
+                AudioRecording.stamp(this, added)
+                // add() already published the item's geometry before history stamped its recording.
+                document.syncChanged(added.filterIndexed { index, item -> item.sync != before[index] })
+            }
+        }
     }
 
     /**
@@ -328,13 +388,13 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     private var committingWetStroke = false
 
     /** Tessellate [item] and hand the triangles to the renderer, or drop it if it draws nothing. */
-    private fun pushItem(item: CanvasItem) {
+    private fun pushItem(item: CanvasItem, vectorJobs: MutableList<VectorMeshRequest>? = null) {
         if (!document.layers.visible(item)) { scene.remove(item); return }
         // Held back while the front buffer is still the only thing showing this stroke. The
         // document and the history already have it; only its triangles wait.
         for (h in heldItems) if (h === item) return
         if (item is ImageItem) {
-            if (!pushVectorImage(item)) scene.upsertImage(item, item.paintBounds())
+            if (!pushVectorImage(item, vectorJobs)) scene.upsertImage(item, item.paintBounds())
             return
         }
         val started = System.nanoTime()
@@ -346,6 +406,8 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         }
         scene.upsert(item, meshed.parts, meshed.bounds, committingWetStroke)
     }
+
+    private class VectorMeshRequest(val item: ImageItem, val drawing: ImageDrawSnapshot, val bounds: Rect)
 
     /**
      * A placed SVG becomes triangles like everything else, so it stays sharp at any zoom instead of
@@ -359,23 +421,29 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
      *
      * Returns false for a raster image, which takes the texture path as before.
      */
-    private fun pushVectorImage(item: ImageItem): Boolean {
+    private fun pushVectorImage(item: ImageItem, vectorJobs: MutableList<VectorMeshRequest>?): Boolean {
         if (!com.xnotes.platform.ImageDecoder.isVector(item.image.file.path)) return false
         val bounds = item.paintBounds()
+        val request = VectorMeshRequest(item, ImageDrawSnapshot.capture(item), bounds)
         scene.upsert(item, vectorPlaceholder(bounds), bounds)
+        if (vectorJobs == null) startVectorMesh(request) else vectorJobs.add(request)
+        return true
+    }
+
+    /** Register only after the placeholder's complete scene update has been committed. */
+    private fun startVectorMesh(request: VectorMeshRequest) {
+        val item = request.item
+        val drawing = request.drawing
         val token = vectorMeshSeq.incrementAndGet()
         vectorMeshGen[item] = token
-        val rect = item.rect
-        val orientation = item.orientation
-        val angle = item.angle
-        val flip = item.flip
-        decodeExecutor.execute {
+        val work = Runnable {
             val started = System.nanoTime()
-            val parsed = com.xnotes.platform.VectorScenes.sceneFor(item.image.file)
+            val parsed = com.xnotes.platform.VectorScenes.sceneFor(drawing.source.file)
             val parts = if (parsed == null) {
                 emptyList()
             } else {
-                VectorMesher.mesh(parsed, rect, orientation, angle, StrokeTessellator.DEFAULT_TOLERANCE, flip)
+                VectorMesher.mesh(parsed, drawing.rect, drawing.orientation, drawing.angle,
+                    StrokeTessellator.DEFAULT_TOLERANCE, drawing.flip)
             }
             val ms = (System.nanoTime() - started) / 1_000_000.0
             // The mesher stops at a vertex ceiling; say so rather than silently drawing part of it.
@@ -383,19 +451,26 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
                 android.util.Log.w(
                     "InfiniteEditor",
                     "svg drawn only as far as the ${VectorMesher.MAX_VERTICES} vertex ceiling: " +
-                        item.image.file.path,
+                        drawing.source.file.path,
                 )
             }
             // Claimed and filed on the main thread, so this cannot land after a removal that was
             // decided while it ran and put the item back on the canvas.
-            view.post {
+            mainHandler.post {
                 if (!vectorMeshGen.remove(item, token) || parts.isEmpty() || !document.layers.visible(item)) return@post
                 scene.lastTessellateMs = ms
-                scene.upsert(item, parts, bounds)
+                scene.upsert(item, parts, request.bounds)
                 view.publish()
             }
         }
-        return true
+        try {
+            decodeExecutor.execute(work)
+        } catch (e: java.util.concurrent.RejectedExecutionException) {
+            // The placeholder is already committed. Settle this request without undoing that
+            // update or preventing other jobs and the caller's final frame publication.
+            vectorMeshGen.remove(item, token)
+            android.util.Log.w("InfiniteEditor", "svg mesh task rejected", e)
+        }
     }
 
     /** The faint box that holds a vector image's place until its triangles land. */
@@ -411,10 +486,15 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     /** Re-tessellate the whole document, after a load or a wholesale list replacement. */
     private fun rebuildScene() {
-        scene.reset()
-        vectorMeshGen.clear()
-        scene.batch { for (item in document.items) pushItem(item) }
-        publishLayerOrder()
+        val vectorJobs = ArrayList<VectorMeshRequest>()
+        scene.batch(afterCommit = {
+            vectorMeshGen.clear()
+            for (request in vectorJobs) startVectorMesh(request)
+        }) {
+            scene.reset(imageDecodeBinding)
+            for (item in document.items) pushItem(item, vectorJobs)
+            publishLayerOrder()
+        }
     }
 
     private fun publishLayerOrder() {
@@ -1422,6 +1502,9 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
      */
     private var awaitingPublish = false
 
+    /** Completions belonging to a retired canvas cannot clear the replacement's pending ink. */
+    private var surfaceAttachGeneration = 0
+
     /** The tail as it was last meshed, which a stroke joining this one has to settle first. */
     private var wetTail: List<MeshPart> = emptyList()
 
@@ -1613,8 +1696,29 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         // Every handover tracks its own publication, whichever path settled: what the caller does
         // next is not what says when these triangles reached the glass.
         awaitingPublish = true
-        view.publishThen { mainHandler.post { awaitingPublish = false } }
+        val surfaceGeneration = surfaceAttachGeneration
+        view.publishThen {
+            mainHandler.post {
+                if (surfaceGeneration == surfaceAttachGeneration) awaitingPublish = false
+            }
+        }
         return true
+    }
+
+    /** Return all pad-owned ink before retiring a surface, including an unfinished live stroke. */
+    private fun recoverSurfaceInk() {
+        endFrontInk()
+        settleHeld()
+        val stroke = wetOwner ?: return
+        // The old pad may have contained the settled runs. Rebuild the whole wet stroke in the
+        // ordinary scene, without cancelling input or attempting to take the new pad mid-stroke.
+        wetMeshed = 0
+        wetArc = 0.0
+        runPoints = WET_RUN_POINTS
+        frontDecided = true
+        scene.setWetParts(emptyList(), Rect(0.0, 0.0, 0.0, 0.0))
+        publishWetStroke(stroke)
+        view.publish()
     }
 
     private fun startFrontInk(): Boolean {
@@ -1895,7 +1999,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     /** Place recordings a crash left behind for this canvas, once it has a size to place them in the middle of. */
     fun recoverRecordings(fromSession: Boolean, tries: Int = 0) {
-        view.postDelayed({
+        mainHandler.postDelayed({
             if (view.width <= 0 || view.height <= 0) {
                 if (tries < 40) recoverRecordings(fromSession, tries + 1)
                 return@postDelayed
@@ -1995,13 +2099,13 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
             onMessage?.invoke(appContext.getString(com.xnotes.R.string.audio_nothing_linked), null)
             return
         }
-        val command = com.xnotes.core.history.UnlinkSync(marks)
-        command.redo()
+        val command = com.xnotes.core.infinite.OnCanvasSync(
+            document, com.xnotes.core.history.UnlinkSync(marks), marks.map { it.first },
+        )
+        command.redo() // publishes through onSyncChanged
         history.push(command)
-        itemsRevision++
         markDirty()
         refresh()
-        view.publish()
         onMessage?.invoke(appContext.getString(com.xnotes.R.string.audio_unlinked), appContext.getString(com.xnotes.R.string.undo) to { undo() })
     }
 
@@ -2370,6 +2474,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         textBar = null
         document.listener = null
         document = next
+        imageDecodeBinding = Any()
         next.listener = modelListener
         selection = CanvasSelection(next)
         hasSelection = false

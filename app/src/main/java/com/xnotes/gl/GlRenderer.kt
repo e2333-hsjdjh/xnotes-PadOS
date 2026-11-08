@@ -69,7 +69,13 @@ interface GlScene {
  * was holding, and rebuilds. Anything GPU-resident records the generation it was born under, and
  * a stale generation means rebuild rather than bind a dangling name.
  */
-class GlRenderer : GLSurfaceView.Renderer {
+class GlRenderer(
+    initialContextGen: Int = 0,
+    private val diagnostics: RenderDiagnostics? = null,
+) : GLSurfaceView.Renderer {
+
+    private var diagnosticContext: RenderDiagnostics.ContextToken? = null
+    private var diagnosticTarget: RenderDiagnostics.TargetToken? = null
 
     /** Snapshot the next frame will draw; replaced wholesale by the main thread. */
     @Volatile
@@ -94,9 +100,9 @@ class GlRenderer : GLSurfaceView.Renderer {
         afterFrame.add(action)
     }
 
-    /** Bumped on every new EGL context. Everything GPU-resident is stamped with it. */
+    /** Bumped on every new EGL context; a replacement View seeds this from the retired renderer. */
     @Volatile
-    var contextGen: Int = 0
+    var contextGen: Int = initialContextGen
         private set
 
     /** Set when a shader would not build, so the host can show a message rather than a black view. */
@@ -151,6 +157,8 @@ class GlRenderer : GLSurfaceView.Renderer {
     var onContextReady: ((Int) -> Unit)? = null
 
     override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
+        diagnosticContext = diagnostics?.contextCreated()
+        diagnosticTarget = null
         // The old context is already gone: its objects cannot and must not be deleted, only dropped.
         background = null
         contextGen++
@@ -167,6 +175,7 @@ class GlRenderer : GLSurfaceView.Renderer {
             cursor = CursorShader(contextGen)
         } catch (e: GlShaderException) {
             failure = e.message
+            diagnostics?.failure(diagnosticContext, RenderDiagnostics.Failure.SHADER)
             Log.e(TAG, "background shader unavailable", e)
         }
         GLES30.glDisable(GLES30.GL_DITHER)
@@ -175,16 +184,21 @@ class GlRenderer : GLSurfaceView.Renderer {
         // wrong is reported as that rather than as a canvas that looks a bit off.
         val checked = GlSelfCheck().run(contextGen)
         selfCheck = checked.summary
-        if (!checked.ok) failure = listOfNotNull(failure, checked.summary).joinToString("; ")
+        if (!checked.ok) {
+            failure = listOfNotNull(failure, checked.summary).joinToString("; ")
+            diagnostics?.failure(diagnosticContext, RenderDiagnostics.Failure.SELF_CHECK)
+        }
         scene?.onContextCreated(contextGen)
         onContextReady?.invoke(contextGen)
     }
 
     override fun onSurfaceChanged(unused: GL10?, width: Int, height: Int) {
         GLES30.glViewport(0, 0, width, height)
+        diagnosticTarget = diagnostics?.rendererResized(diagnosticContext, width, height)
     }
 
     override fun onDrawFrame(unused: GL10?) {
+        val target = diagnosticTarget
         val f = frame
         if (f.widthPx <= 0 || f.heightPx <= 0) return
         // Taken before the frame, not after: something added while this one draws is waiting on
@@ -208,6 +222,7 @@ class GlRenderer : GLSurfaceView.Renderer {
             cursor?.draw(f.cursorX, f.cursorY, f.cursorRadius, cursorColor(f.paper), f.widthPx, f.heightPx)
         }
         sampleFrame(started, f)
+        diagnostics?.frameDrawn(target, f.widthPx, f.heightPx)
         // After the draw and before the swap, which is the earliest point at which this frame's
         // pixels are certain to be the next thing the compositor latches for this layer.
         for (action in after) action()

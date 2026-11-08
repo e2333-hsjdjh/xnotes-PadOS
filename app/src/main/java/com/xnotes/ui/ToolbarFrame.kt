@@ -3,8 +3,6 @@ package com.xnotes.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -20,15 +18,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.TextUnit
@@ -71,9 +66,6 @@ internal val LocalBar = staticCompositionLocalOf { barMetrics(ToolbarSize.REGULA
 /** Where a menu opens from its anchor; a side rail sets it so its menus open beside the rail. */
 internal val LocalMenuOffset = compositionLocalOf { DpOffset.Zero }
 
-/** How far a floating bar sits in from the canvas edge. */
-private val FLOAT_MARGIN = 8.dp
-
 /** What a floating bar covers of the canvas, for overlays that must stay out from under it. */
 internal val LocalToolbarCover = compositionLocalOf { PaddingValues(0.dp) }
 
@@ -81,48 +73,23 @@ internal val LocalToolbarCover = compositionLocalOf { PaddingValues(0.dp) }
  * Lays a pane out with its [bar] along the edge Preferences chose and [content] in the rest. A
  * floating bar is handed to [content] to lay over its canvas instead, and [onCover] learns how many
  * px of each edge (left, top, right, bottom) it covers so the canvas keeps its pages clear of it.
+ * [showToolbar] changes only chrome; the editor remains in the same native host.
  */
 @Composable
 internal fun ColumnScope.ToolbarAround(
     bar: @Composable () -> Unit,
     onCover: (Double, Double, Double, Double) -> Unit,
+    showToolbar: Boolean = true,
     content: @Composable (floatingBar: @Composable BoxScope.() -> Unit) -> Unit,
 ) {
-    val look = LocalToolbarLook.current
-    val rest = Modifier.weight(1f).fillMaxWidth()
-    if (!look.floating) {
-        SideEffect { onCover(0.0, 0.0, 0.0, 0.0) }
-        val docked: @Composable BoxScope.() -> Unit = {}
-        // Left and right are the screen's, as the canvas insets are, whatever the language.
-        val across = Arrangement.Absolute.Left
-        when (look.position) {
-            ToolbarPosition.TOP -> { bar(); Box(rest) { content(docked) } }
-            ToolbarPosition.BOTTOM -> { Box(rest) { content(docked) }; bar() }
-            ToolbarPosition.LEFT -> Row(rest, across) { bar(); Box(Modifier.weight(1f).fillMaxHeight()) { content(docked) } }
-            ToolbarPosition.RIGHT -> Row(rest, across) { Box(Modifier.weight(1f).fillMaxHeight()) { content(docked) }; bar() }
-        }
-        return
-    }
-    val depth = barMetrics(look.size).thickness + FLOAT_MARGIN
-    val px = with(LocalDensity.current) { depth.toPx().toDouble() }
-    val position = look.position
-    SideEffect {
-        onCover(
-            if (position == ToolbarPosition.LEFT) px else 0.0,
-            if (position == ToolbarPosition.TOP) px else 0.0,
-            if (position == ToolbarPosition.RIGHT) px else 0.0,
-            if (position == ToolbarPosition.BOTTOM) px else 0.0,
-        )
-    }
-    val (cover, edge) = when (position) {
-        ToolbarPosition.TOP -> PaddingValues(top = depth) to Alignment.TopCenter
-        ToolbarPosition.BOTTOM -> PaddingValues(bottom = depth) to Alignment.BottomCenter
-        ToolbarPosition.LEFT -> PaddingValues.Absolute(left = depth) to AbsoluteAlignment.CenterLeft
-        ToolbarPosition.RIGHT -> PaddingValues.Absolute(right = depth) to AbsoluteAlignment.CenterRight
-    }
-    CompositionLocalProvider(LocalToolbarCover provides cover) {
-        Box(rest) { content { Box(Modifier.align(edge).padding(FLOAT_MARGIN)) { bar() } } }
-    }
+    PaneChromeLayout(
+        look = LocalToolbarLook.current,
+        showToolbar = showToolbar,
+        bar = bar,
+        onCover = onCover,
+        modifier = Modifier.weight(1f).fillMaxWidth(),
+        content = content,
+    )
 }
 
 /** Only the focused pane advertises an active editing tool; view settings stay per document. */

@@ -36,7 +36,7 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "com.xnotes.pen.PenTestRunner"
-        versionCode = if (aiPreview) 3 else if (splitPreview) 79 else 95
+        versionCode = if (aiPreview) 3 else if (splitPreview) 79 else 98
         versionName = "0.9.8"
         ndk {
             // This preview targets the ARM64 MovinkPad and ARM64 test emulator.
@@ -164,4 +164,7 @@ dependencies {
 // Robolectric resolves its Android runtime separately from Gradle dependencies.
 tasks.withType<Test>().configureEach {
     systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+    // Robolectric's SharedMemory close path accesses JDK FileDescriptor internals on JDK 21.
+    // Limit this module opening to the host-test JVM; it does not affect Android builds.
+    jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")
 }

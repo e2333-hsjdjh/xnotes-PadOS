@@ -32,6 +32,19 @@ object SystemClipboard {
         return if (looksSvg) text.toByteArray() else null
     }
 
+    /**
+     * Whether the clipboard holds an image, judged from its description alone. Reading the clip
+     * itself makes Android 12+ show "pasted from your clipboard", so a check that runs on every
+     * touch must not; this one does not. Copied SVG source is plain text and so is not counted:
+     * its type cannot be told without reading it. The menu that follows asks [hasImage].
+     */
+    fun mayHoldImage(context: Context): Boolean {
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return false
+        if (!cm.hasPrimaryClip()) return false
+        val description = cm.primaryClipDescription ?: return false
+        return description.hasMimeType("image/*") || description.hasMimeType(android.content.ClipDescription.MIMETYPE_TEXT_URILIST)
+    }
+
     /** Whether there is anything here worth offering a paste for. */
     fun hasImage(context: Context): Boolean = imageUri(context) != null || svgBytes(context) != null
 

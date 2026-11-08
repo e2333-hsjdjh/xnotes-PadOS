@@ -1,0 +1,118 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.13/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build
+Warning: SDK processing. This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:checkDebugAarMetadata
+> Task :app:generateDebugResValues
+> Task :app:mapDebugSourceSetPaths
+> Task :app:extractDebugSupportedLocales
+> Task :app:generateDebugLocaleConfig FROM-CACHE
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:mergeDebugResources
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug FROM-CACHE
+> Task :app:parseDebugLocalResources
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:javaPreCompileDebug FROM-CACHE
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest FROM-CACHE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:mergeDebugShaders
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets
+> Task :app:compressDebugAssets FROM-CACHE
+> Task :app:processDebugManifestForPackage
+> Task :app:desugarDebugFileDependencies FROM-CACHE
+> Task :app:checkDebugDuplicateClasses
+> Task :app:mergeExtDexDebug FROM-CACHE
+> Task :app:processDebugResources
+> Task :app:mergeLibDexDebug FROM-CACHE
+> Task :app:configureCMakeDebug[arm64-v8a]
+
+> Task :app:buildCMakeDebug[arm64-v8a]
+C/C++: ninja: Entering directory `<workspace>/tmp/master-test2/source/app/.cxx/Debug/1ukx5k3c/arm64-v8a'
+C/C++: <workspace>/tmp/master-test2/source/app/src/main/cpp/grammars/yaml/scanner.c:470:18: warning: overflow converting case value to switch condition type (-1 to 255) [-Wswitch]
+C/C++:   470 |             case SCN_FAIL:
+C/C++:       |                  ^
+C/C++: <workspace>/tmp/master-test2/source/app/src/main/cpp/grammars/yaml/scanner.c:72:18: note: expanded from macro 'SCN_FAIL'
+C/C++:    72 | #define SCN_FAIL (-1)
+C/C++:       |                  ^
+C/C++: <workspace>/tmp/master-test2/source/app/src/main/cpp/grammars/yaml/scanner.c:512:22: warning: overflow converting case value to switch condition type (-1 to 255) [-Wswitch]
+C/C++:   512 |                 case SCN_FAIL:
+C/C++:       |                      ^
+C/C++: <workspace>/tmp/master-test2/source/app/src/main/cpp/grammars/yaml/scanner.c:72:18: note: expanded from macro 'SCN_FAIL'
+C/C++:    72 | #define SCN_FAIL (-1)
+C/C++:       |                  ^
+C/C++: <workspace>/tmp/master-test2/source/app/src/main/cpp/grammars/yaml/scanner.c:526:22: warning: overflow converting case value to switch condition type (-1 to 255) [-Wswitch]
+C/C++:   526 |                 case SCN_FAIL:
+C/C++:       |                      ^
+C/C++: <workspace>/tmp/master-test2/source/app/src/main/cpp/grammars/yaml/scanner.c:72:18: note: expanded from macro 'SCN_FAIL'
+C/C++:    72 | #define SCN_FAIL (-1)
+C/C++:       |                  ^
+C/C++: 3 warnings generated.
+
+> Task :app:compileDebugKotlin
+> Task :app:mergeDebugJniLibFolders
+> Task :app:mergeDebugNativeLibs
+> Task :app:stripDebugDebugSymbols
+> Task :app:validateSigningDebug
+> Task :app:writeDebugAppMetadata
+> Task :app:writeDebugSigningConfigVersions
+
+> Task :app:compileDebugKotlin
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/MainActivity.kt:1752:30 Condition is always 'true'.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/canvas/InteractionController.kt:1182:13 'when' is exhaustive so 'else' is redundant here.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/gl/RenderDiagnostics.kt:179:65 'val id: Long' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/CanvasPdf.kt:80:20 'fun appendRawCommands(p0: String!): Unit' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/CanvasPdf.kt:84:20 'fun appendRawCommands(p0: String!): Unit' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/LatexInternals.kt:2:36 Suppression of error 'INVISIBLE_REFERENCE' might compile and work, but the compiler behavior is UNSPECIFIED and WILL NOT BE PRESERVED. Please report your use case to the Kotlin issue tracker instead: https://kotl.in/issue
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/OutlineCapture.kt:81:49 'enum class EdgeType : Enum<Canvas.EdgeType!>' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/OutlineCapture.kt:84:48 'enum class EdgeType : Enum<Canvas.EdgeType!>' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/OutlineCapture.kt:87:90 'enum class EdgeType : Enum<Canvas.EdgeType!>' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/Pdf.kt:444:38 'fun appendRawCommands(p0: String!): Unit' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/Pdf.kt:448:38 'fun appendRawCommands(p0: String!): Unit' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/PdfBands.kt:172:70 'fun doubleValue(): Double' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/PdfBands.kt:248:40 'fun doubleValue(): Double' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/PdfBoxRenderer.kt:136:24 The corresponding parameter in the supertype 'Renderer' is named 'sx'. This may cause problems when calling this function with named arguments.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/PdfBoxRenderer.kt:136:42 The corresponding parameter in the supertype 'Renderer' is named 'sy'. This may cause problems when calling this function with named arguments.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/PdfBoxRenderer.kt:558:24 'fun appendRawCommands(p0: String!): Unit' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/PdfBoxRenderer.kt:579:12 'fun appendRawCommands(p0: String!): Unit' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/PdfTags.kt:331:16 'fun appendRawCommands(p0: String!): Unit' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/PdfTags.kt:333:16 'fun appendRawCommands(p0: String!): Unit' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/platform/PdfTags.kt:347:12 'fun appendRawCommands(p0: String!): Unit' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/ui/AboutPane.kt:89:103 'field versionCode: Int' is deprecated. Deprecated in Java.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/ui/TextFormatBar.kt:154:36 'val Icons.Filled.FormatAlignLeft: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.FormatAlignLeft.
+w: file://<workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/ui/TextFormatBar.kt:156:37 'val Icons.Filled.FormatAlignRight: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.FormatAlignRight.
+
+> Task :app:compileDebugJavaWithJavac
+Note: <workspace>/tmp/master-test2/source/app/src/main/java/com/xnotes/vendor/materialcolor/dynamiccolor/ColorSpec2021.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:processDebugJavaRes
+
+> Task :app:compileDebugUnitTestKotlin
+w: file://<workspace>/tmp/master-test2/source/app/src/test/java/com/xnotes/format/BundlePdfTest.kt:108:32 The corresponding parameter in the supertype 'Target' is named 'source'. This may cause problems when calling this function with named arguments.
+w: file://<workspace>/tmp/master-test2/source/app/src/test/java/com/xnotes/format/BundlePdfTest.kt:114:32 The corresponding parameter in the supertype 'Target' is named 'source'. This may cause problems when calling this function with named arguments.
+
+> Task :app:dexBuilderDebug
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugUnitTestJavaRes
+> Task :app:testDebugUnitTest
+> Task :app:mergeDebugGlobalSynthetics FROM-CACHE
+> Task :app:mergeProjectDexDebug FROM-CACHE
+> Task :app:mergeDebugJavaResource
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect
+> Task :app:assembleDebug
+
+[Incubating] Problems report is available at: file://<workspace>/tmp/master-test2/source/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 3m 8s
+46 actionable tasks: 36 executed, 10 from cache

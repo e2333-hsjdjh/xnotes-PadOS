@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The infinite canvas is a sketching surface that only opens on its own. -->
+    <string name="split_canvas_unsupported">Canvases open on their own and can\'t be used in split view.</string>
+    <string name="split_canvas_saved_unsupported">This split includes a canvas, which split view no longer supports. Open its documents individually; they are unchanged.</string>
+</resources>

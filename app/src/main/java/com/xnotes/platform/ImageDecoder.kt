@@ -69,9 +69,14 @@ object ImageDecoder {
         val scale = minOf(mw.toDouble() / bmp.width, mh.toDouble() / bmp.height)
         val tw = (bmp.width * scale).toInt().coerceAtLeast(1)
         val th = (bmp.height * scale).toInt().coerceAtLeast(1)
-        val scaled = Bitmap.createScaledBitmap(bmp, tw, th, true)
-        if (scaled !== bmp) bmp.recycle()
-        return scaled
+        var returnedOriginal = false
+        try {
+            val scaled = Bitmap.createScaledBitmap(bmp, tw, th, true)
+            returnedOriginal = scaled === bmp
+            return scaled
+        } finally {
+            if (!returnedOriginal) bmp.recycle()
+        }
     }
 
     /** True when [path] holds a vector (SVG) source with no native pixel resolution.

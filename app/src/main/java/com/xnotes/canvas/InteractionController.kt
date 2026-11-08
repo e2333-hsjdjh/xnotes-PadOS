@@ -175,7 +175,10 @@ class InteractionController(
     /** A short haptic tick (e.g. the overscroll pull crossed the add-page threshold). */
     private val onHaptic: () -> Unit = {},
 ) {
-    /** Whether the system clipboard currently holds an image (provided by the host). */
+    /**
+     * Whether the system clipboard may hold an image (provided by the host). Called on touch-down,
+     * so the host must answer without reading the clip, which shows a system notice.
+     */
     var clipboardHasImage: () -> Boolean = { false }
 
     /** The inline-flow caret controller; TEXT-tool gestures route here (installed by the Editor). */

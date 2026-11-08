@@ -49,14 +49,17 @@ class GlowTarget {
     /** The buffer a dragged selection's halos accumulate into, composited at the drag's offset. */
     val liftLayerIndex: Int get() = 3
 
-    /** Size the buffers for a viewport, rebuilding only when the size actually changed. */
-    fun resize(viewportW: Int, viewportH: Int, gen: Int) {
-        if (gen != contextGen) return
+    /**
+     * Returns true when rebuilding discards the cached content. This is an invalidation signal,
+     * not confirmation that allocation or framebuffer validation succeeded.
+     */
+    fun resize(viewportW: Int, viewportH: Int, gen: Int): Boolean {
+        if (gen != contextGen) return false
         // Round up, so an odd viewport still has a whole buffer pixel for its last fraction. The
         // extra sliver is never drawn into and never sampled; see [usedFraction].
         val w = ((viewportW + DOWNSCALE - 1) / DOWNSCALE).coerceAtLeast(1)
         val h = ((viewportH + DOWNSCALE - 1) / DOWNSCALE).coerceAtLeast(1)
-        if (w == width && h == height && framebuffers[0] != 0) return
+        if (w == width && h == height && framebuffers[0] != 0) return false
         release()
         width = w
         height = h
@@ -79,6 +82,7 @@ class GlowTarget {
             )
         }
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        return true
     }
 
     /** Bind buffer [index] for drawing. The caller clears whatever region it is about to touch. */

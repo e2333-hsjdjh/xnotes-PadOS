@@ -10,6 +10,7 @@
     <string name="ai_msg_search_response_too_large">搜索响应过大</string>
     <string name="ai_msg_request_too_large">截图或会话过大，请新建会话并缩小截图</string>
     <string name="ai_msg_request_http_failed">请求失败（HTTP %1$d），请检查接口、密钥、模型及额度</string>
+    <string name="ai_msg_request_http_failed_detail">请求失败（HTTP %1$d）：%2$s</string>
     <string name="ai_msg_answer_too_long">回答超出长度限制</string>
     <string name="ai_msg_provider_error">供应商返回错误，请检查模型配置</string>
     <string name="ai_msg_connection_ended_early">连接提前结束，请重试</string>
@@ -87,4 +88,13 @@
     <string name="ai_msg_models_response_too_large">模型列表过大</string>
     <string name="ai_msg_models_invalid_reply">服务未返回可识别的模型列表</string>
     <string name="ai_msg_config_too_many_models">最多保存 %1$d 个模型，请先移除不用的模型</string>
+    <string name="ai_msg_template_gen_empty">请先描述想要的模板</string>
+    <string name="ai_msg_template_gen_too_long">要求不能超过 %1$d 个字符</string>
+    <string name="ai_msg_template_gen_failed">AI 多次生成的模板仍无法使用：%1$s</string>
+    <string name="ai_msg_config_image_provider_required">请为图像模型选择供应商</string>
+    <string name="ai_msg_config_image_model_invalid">图像模型名称无效</string>
+    <string name="ai_msg_image_model_required">请先在 AI 设置中设置图像模型</string>
+    <string name="ai_msg_image_invalid_reply">图像接口未返回可用的图片</string>
+    <string name="ai_msg_image_too_large">生成的图片过大</string>
+    <string name="ai_msg_thinking_unsupported">当前模型不支持所选的思考设置，本次按模型默认回答</string>
 </resources>

@@ -307,18 +307,21 @@ class AiSessions(
                 val pdfIds=(original.context()+user).mapNotNull { it.pdf?.id?.takeIf(String::isNotBlank) }.toSet()
                 pdfLease=withContext(Dispatchers.IO) { holdPdfs(pdfIds) }
                 progress(id, AiText.t(AiMsg.PROGRESS_PREPARING))
-                val prepared = if ((original.context() + user).any { !it.pdf?.id.isNullOrEmpty() }) {
-                    withContext(Dispatchers.IO) { AiPdfTools.prepare(tools, client, original.context(), user, checkNotNull(pdfAccess) { AiText.t(AiMsg.PDF_SERVICE_UNAVAILABLE) }) { label -> progress(id, label) } }
-                } else user
-                // Web search is a tool the answering model calls when it needs it, as in DeepSeek Harness;
-                // a model or API without tool calling answers without it and the turn says so.
-                progress(id, AiText.t(AiMsg.PROGRESS_GENERATING))
                 val history = original.context()
+                // Web search and PDF reading are tools the answering model calls when it needs them, as in
+                // DeepSeek Harness. A model or API without tool calling answers without web search, and the turn
+                // says so; its PDFs are then read through the earlier JSON loop before it answers.
+                val pdfFiles = AiPdfTools.files(history + user)
+                val access = if (pdfFiles.isEmpty()) null else checkNotNull(pdfAccess) { AiText.t(AiMsg.PDF_SERVICE_UNAVAILABLE) }
+                var pdfReader = access?.let { AiPdfTools.Reader(pdfFiles, it) }
+                var prepared = user
+                progress(id, AiText.t(AiMsg.PROGRESS_GENERATING))
                 val tail = mutableListOf<org.json.JSONObject>()
                 val evidence = mutableListOf<String>()
                 val failures = mutableListOf<String>()
-                var offerTools = useSearch
+                var offerWeb = useSearch
                 var unsupported = ""
+                var thinkingDropped = false
                 var rounds = 0
                 var lastSave = System.nanoTime()
                 val append: suspend (String) -> Unit = { chunk ->
@@ -328,29 +331,64 @@ class AiSessions(
                     }
                 }
                 while (true) {
-                    val choice = when { !offerTools -> null; rounds >= AiWebTools.MAX_ROUNDS -> "none"; else -> "auto" }
+                    val reader = pdfReader
+                    val offered = org.json.JSONArray().apply {
+                        if (offerWeb) AiWebTools.definitions().let { d -> for (i in 0 until d.length()) put(d.get(i)) }
+                        if (reader != null) AiPdfTools.definitions().let { d -> for (i in 0 until d.length()) put(d.get(i)) }
+                    }.takeIf { it.length() > 0 }
+                    val maxRounds = if (reader != null) AiPdfTools.MAX_ROUNDS else AiWebTools.MAX_ROUNDS
+                    val choice = when { offered == null -> null; rounds >= maxRounds -> "none"; else -> "auto" }
                     val reply = try {
-                        withContext(Dispatchers.IO) { client.complete(settings, history + prepared, tail, choice?.let { AiWebTools.definitions() }, choice ?: "auto", append) }
+                        withContext(Dispatchers.IO) { client.complete(settings, history + prepared, tail, offered, choice ?: "auto", append) }
                     } catch (e: AiToolsUnsupported) {
+                        // A model that takes no pictures refuses the request carrying page images: drop them,
+                        // tell it so, and go on reading text. Only once, so another cause still ends the turn.
+                        val textOnly = if (reader != null && !reader.imagesOff) AiPdfTools.withoutImages(tail) else null
+                        if (textOnly != null) {
+                            reader!!.imagesOff = true
+                            tail.clear(); tail += textOnly
+                            continue
+                        }
                         // Only the first request can be refused for offering tools; later ones already carry tool rounds.
                         if (choice == null || tail.isNotEmpty()) throw IllegalStateException(e.message)
-                        offerTools = false; unsupported = AiText.t(AiMsg.TOOLS_UNSUPPORTED); progress(id, unsupported)
+                        if (offerWeb) { offerWeb = false; unsupported = AiText.t(AiMsg.TOOLS_UNSUPPORTED); progress(id, unsupported) }
+                        if (reader != null && access != null) {
+                            pdfReader = null
+                            prepared = withContext(Dispatchers.IO) { AiPdfTools.prepare(tools, client, history, user, access) { label -> progress(id, label) } }
+                            progress(id, AiText.t(AiMsg.PROGRESS_GENERATING))
+                        }
                         continue
                     }
+                    if (reply.thinkingDropped) thinkingDropped = true
                     if (reply.calls.isEmpty() || choice != "auto") break
                     rounds++
-                    val round = AiWebTools.run(reply.calls, client, settings.searchKey, user.text) { label -> progress(id, label) }
+                    // Each call goes to the tool set that was offered; anything else is answered, not run.
+                    val results = arrayOfNulls<org.json.JSONObject>(reply.calls.size)
+                    val webCalls = reply.calls.withIndex().filter { offerWeb && (it.value.name == AiWebTools.SEARCH || it.value.name == AiWebTools.FETCH) }
+                    val pdfCalls = reply.calls.withIndex().filter { reader != null && it.value.name in AiPdfTools.NAMES }
+                    if (webCalls.isNotEmpty()) {
+                        val round = AiWebTools.run(webCalls.map { it.value }, client, settings.searchKey, user.text) { label -> progress(id, label) }
+                        webCalls.forEachIndexed { n, call -> results[call.index] = round.messages[n] }
+                        evidence += round.evidence; failures += round.failures
+                    }
+                    val pdfRound = if (pdfCalls.isNotEmpty() && reader != null) reader.run(pdfCalls.map { it.value }) { label -> progress(id, label) } else null
+                    pdfRound?.let { r -> pdfCalls.forEachIndexed { n, call -> results[call.index] = r.messages[n] } }
+                    reply.calls.forEachIndexed { n, call ->
+                        if (results[n] == null) results[n] = org.json.JSONObject().put("role", "tool").put("tool_call_id", call.id)
+                            .put("content", "工具调用失败：" + AiText.t(AiMsg.WEB_TOOL_UNKNOWN))
+                    }
                     tail += AiWebTools.assistantMessage(reply)
                     // The next request withholds tools; the model is told why in the results it reads.
-                    tail += if (rounds >= AiWebTools.MAX_ROUNDS) AiWebTools.withLimitNotice(round.messages) else round.messages
-                    evidence += round.evidence; failures += round.failures
+                    val messages = results.filterNotNull()
+                    tail += if (rounds >= maxRounds) AiWebTools.withLimitNotice(messages, if (reader != null) AiPdfTools.LIMIT_NOTICE else AiWebTools.LIMIT_NOTICE) else messages
+                    pdfRound?.images?.let { tail += it }
                 }
                 // What was found stays with the question, for follow-ups and the details view.
                 if (evidence.isNotEmpty()) update(id) { c ->
                     c.copy(turns = c.turns.dropLast(1) + c.turns.last().let { it.copy(user = it.user.copy(searchContext = evidence.joinToString("\n\n").take(AiWebTools.EVIDENCE_MAX))) })
                 }?.let { persist(it) }
                 check(chats[id]?.turns?.lastOrNull()?.answer?.isNotBlank() == true) { AiText.t(AiMsg.NO_TEXT_RETURNED) }
-                finish(id, "已完成", listOfNotNull(unsupported.ifEmpty { null }, failures.firstOrNull()?.let { AiText.t(AiMsg.WEB_TOOL_FAILED, it) }).joinToString(" · "))
+                finish(id, "已完成", listOfNotNull(unsupported.ifEmpty { null }, AiText.t(AiMsg.THINKING_UNSUPPORTED).takeIf { thinkingDropped }, failures.firstOrNull()?.let { AiText.t(AiMsg.WEB_TOOL_FAILED, it) }).joinToString(" · "))
             } catch (e: CancellationException) {
                 if (started) finish(id, "已停止", AiText.t(AiMsg.STOPPED_BY_USER))
                 throw e

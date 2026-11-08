@@ -20,6 +20,12 @@ object TextSize {
     val heading = 18.sp
     val headline = 20.sp
     val display = 24.sp
+
+    /**
+     * How much larger a formula is set than the text around it: Latin Modern's x-height is about
+     * 0.43 em against the sans's 0.53, so at the same size a formula reads a size smaller.
+     */
+    const val MathScale = 1.2f
 }
 
 /**

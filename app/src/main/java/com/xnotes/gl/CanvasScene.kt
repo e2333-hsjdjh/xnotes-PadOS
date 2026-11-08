@@ -13,8 +13,9 @@ import com.xnotes.core.infinite.MeshPart
 import com.xnotes.core.model.CanvasItem
 import com.xnotes.core.model.ImageItem
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.SyncMark
 import java.util.IdentityHashMap
-import java.util.concurrent.ConcurrentLinkedQueue
+import com.xnotes.core.model.ImageData
 import kotlin.math.floor
 
 /** Which part of the item under the pen a batch of triangles is. */
@@ -54,12 +55,14 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
     }
 
     private class Record(
+        /** Identity only: no model properties may be read by the GL consumer. */
         val item: CanvasItem,
         val parts: List<Part>,
         var bounds: Rect,
         var z: Int,
         /** Set for a placed image, which is drawn as a texture rather than as coloured triangles. */
-        val image: ImageItem? = null,
+        val image: ImageDrawSnapshot? = null,
+        var sync: SyncMark? = null,
     )
 
     /** An edit handed over from the main thread. */
@@ -68,8 +71,9 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
             val item: CanvasItem,
             val parts: List<MeshPart>,
             val bounds: Rect,
+            val sync: SyncMark?,
             /** Non-null for an image, which draws from a texture rather than from the parts. */
-            val image: ImageItem? = null,
+            val image: ImageDrawSnapshot? = null,
             /**
              * Set on the message that commits the stroke under the pen. Clearing the wet buffer
              * and adding the committed stroke have to land in the same message: as two, a frame
@@ -89,16 +93,14 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
 
         class Remove(val item: CanvasItem) : Edit()
         class Order(val items: List<CanvasItem>, val activeLayerEnd: Int?) : Edit()
+        class SyncChanged(val marks: List<Pair<CanvasItem, SyncMark?>>) : Edit()
 
         /** Room for the batch queued right behind it, so the buffers grow once for all of it. */
         class Reserve(val vertices: Long, val indices: Long) : Edit()
-        object Reset : Edit()
+        class Reset(val binding: Any?) : Edit()
     }
 
-    private val pending = ConcurrentLinkedQueue<Edit>()
-
-    /** Edits held back by [batch], to be queued behind one reservation for the lot. */
-    private var staged: ArrayList<Edit>? = null
+    private val pending = SceneUpdateQueue<Edit>(::withReservations)
 
     /**
      * The stroke under the pen lives in its own buffers, kept apart from the committed geometry so
@@ -119,6 +121,9 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
     private var tailParts: List<Part> = emptyList()
     private var wetBounds = Rect(0.0, 0.0, 0.0, 0.0)
     private val records = IdentityHashMap<CanvasItem, Record>()
+    private val imageSources = IdentityHashMap<ImageData, Int>()
+    private var imageBinding: Any = Any()
+    private var imageSourcesChanged = false
 
     /**
      * The selection under a drag. Its triangles stay exactly where they were tessellated and the
@@ -213,12 +218,17 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
     // --- main-thread API ---
 
     fun upsert(item: CanvasItem, parts: List<MeshPart>, bounds: Rect, clearsWet: Boolean = false) {
-        post(Edit.Upsert(item, parts, bounds, null, clearsWet))
+        post(Edit.Upsert(item, parts.toList(), bounds, item.sync, clearsWet = clearsWet))
     }
 
     /** File a placed image. It carries no geometry: the renderer draws it as a textured quad. */
     fun upsertImage(item: ImageItem, bounds: Rect) {
-        post(Edit.Upsert(item, emptyList(), bounds, item, false))
+        post(Edit.Upsert(item, emptyList(), bounds, item.sync, ImageDrawSnapshot.capture(item)))
+    }
+
+    /** Metadata only: never creates a missing record or changes its geometry. */
+    fun syncChanged(items: List<CanvasItem>) {
+        if (items.isNotEmpty()) post(Edit.SyncChanged(items.map { it to it.sync }))
     }
 
     fun remove(item: CanvasItem) {
@@ -244,17 +254,17 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
     /** Publish an in-progress item made of several runs, which is what a filled shape is. An empty
      *  list clears the whole wet buffer, settled runs included. */
     fun setWetParts(parts: List<MeshPart>, bounds: Rect) {
-        post(Edit.Wet(parts, bounds, WetKind.WHOLE))
+        post(Edit.Wet(parts.toList(), bounds, WetKind.WHOLE))
     }
 
     /** Add a run of the stroke under the pen that has stopped moving; it is never rewritten. */
     fun appendWetRun(parts: List<MeshPart>, bounds: Rect) {
-        post(Edit.Wet(parts, bounds, WetKind.SETTLED))
+        post(Edit.Wet(parts.toList(), bounds, WetKind.SETTLED))
     }
 
     /** Replace the run still moving under the nib, leaving the settled ones where they are. */
     fun setWetTail(parts: List<MeshPart>, bounds: Rect) {
-        post(Edit.Wet(parts, bounds, WetKind.TAIL))
+        post(Edit.Wet(parts.toList(), bounds, WetKind.TAIL))
     }
 
     /** Draw [items] displaced by [at] until this is called again with an empty list. */
@@ -262,36 +272,40 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
         post(Edit.Lift(ArrayList(items), at))
     }
 
-    fun reset() {
-        post(Edit.Reset)
+    fun reset(documentBinding: Any? = null) {
+        post(Edit.Reset(documentBinding))
     }
 
-    /** Queue what [block] publishes behind one reservation, so a whole load grows the buffers once. */
-    fun batch(block: () -> Unit) {
-        if (staged != null) return block()
-        val edits = ArrayList<Edit>()
-        staged = edits
-        try {
-            block()
-        } finally {
-            staged = null
+    /** Publish the whole successful batch at once; [afterCommit] runs on the producer afterwards. */
+    fun batch(afterCommit: (() -> Unit)? = null, block: () -> Unit) = pending.batch(afterCommit, block)
+
+    private fun post(edit: Edit) = pending.post(edit)
+
+    /** Preserve edit order, reserving each reset-delimited segment before its first upsert. */
+    private fun withReservations(edits: List<Edit>): List<Edit> {
+        val reserved = ArrayList<Edit>(edits.size + 1)
+        var start = 0
+        while (start < edits.size) {
+            var end = start + 1
+            while (end < edits.size && edits[end] !is Edit.Reset) end++
+            var firstUpsert = -1
             var vertices = 0L
             var indices = 0L
-            for (edit in edits) {
-                if (edit !is Edit.Upsert) continue
+            for (i in start until end) {
+                val edit = edits[i] as? Edit.Upsert ?: continue
+                if (firstUpsert < 0) firstUpsert = i
                 for (part in edit.parts) {
-                    vertices += part.mesh.vertexCount
-                    indices += part.mesh.indices.size
+                    vertices = Math.addExact(vertices, part.mesh.vertexCount.toLong())
+                    indices = Math.addExact(indices, part.mesh.indices.size.toLong())
                 }
             }
-            pending.add(Edit.Reserve(vertices, indices))
-            pending.addAll(edits)
+            for (i in start until end) {
+                if (i == firstUpsert) reserved.add(Edit.Reserve(vertices, indices))
+                reserved.add(edits[i])
+            }
+            start = end
         }
-    }
-
-    private fun post(edit: Edit) {
-        val batch = staged
-        if (batch != null) batch.add(edit) else pending.add(edit)
+        return reserved
     }
 
     // --- GL thread ---
@@ -304,6 +318,7 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
         minimapShader = null
         glowShader = null
         glowTarget.onContextCreated(contextGen)
+        invalidateHaloLayers()
         try {
             ink = InkShader(contextGen)
             cover = CoverShader(contextGen)
@@ -320,11 +335,18 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
         tailStore.onContextCreated(contextGen)
     }
 
+    /** These keys describe pixels in GlowTarget, not the surviving CPU geometry. */
+    private fun invalidateHaloLayers() {
+        haloKey = null
+        liftHaloKey = null
+        liftHaloAt = LiftTransform.NONE
+    }
+
     override fun drawContent(frame: FrameState) {
         drainEdits()
         textures.beginFrame()
         textures.uploadPending()
-        glowTarget.resize(frame.widthPx, frame.heightPx, contextGen)
+        if (glowTarget.resize(frame.widthPx, frame.heightPx, contextGen)) invalidateHaloLayers()
         val program = ink ?: return
         if (program.contextGen != contextGen) return
         if (records.isEmpty() && wetParts.isEmpty() && tailParts.isEmpty()) {
@@ -382,12 +404,12 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
                 store.bindAttributes(program)
                 livePainted = true
             }
-            val faded = fade != null && fade.fades(record.item)
+            val faded = fade != null && fade.fadesSync(record.sync)
             if (record.image != null) {
                 flushRun(runStart, runCount)
                 runStart = -1
                 runCount = 0
-                drawImage(record, record.image, frame, alpha = if (faded) com.xnotes.core.audio.InkFade.ALPHA else 1.0)
+                drawImage(record.image, frame, alpha = if (faded) com.xnotes.core.audio.InkFade.ALPHA else 1.0)
                 rebind(program, frame, camChunkX, camChunkY)
                 store.bindForDraw(contextGen)
                 store.bindAttributes(program)
@@ -524,7 +546,7 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
             val bounds = liftAt.bounds(record.bounds)
             if (!bounds.intersects(view)) continue
             if (record.image != null) {
-                drawImage(record, record.image, frame, liftAt)
+                drawImage(record.image, frame, liftAt)
                 applyView(program, frame, camChunkX, camChunkY, liftAt)
                 store.bindForDraw(contextGen)
                 store.bindAttributes(program)
@@ -704,13 +726,12 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
      * A placed image as one textured quad. The corners are worked out in double precision here and
      * handed over in clip space, so an image a long way from the origin is placed exactly.
      *
-     * Only the drag's shift is honoured, never its turn: an image's angle lives in the model, so a
-     * selection holding one is turned by the model rather than lifted. The stored angle is folded
-     * into the corners here, which is all a rotation costs on a quad.
+     * Only the drag's shift is honoured, never its turn: a selection holding an image turns the
+     * model rather than lifting it. That edit publishes a new snapshot whose angle is folded into
+     * the corners here, which is all a rotation costs on a quad.
      */
     private fun drawImage(
-        record: Record,
-        image: ImageItem,
+        image: ImageDrawSnapshot,
         frame: FrameState,
         lift: LiftTransform = LiftTransform.NONE,
         alpha: Double = 1.0,
@@ -720,7 +741,7 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
         // Decode for the size the image actually occupies on screen right now; a slice of it, that much larger.
         val share = image.part?.let { minOf(it.w, it.h) }?.takeIf { it > 0.0 } ?: 1.0
         val onScreenEdge = (maxOf(rect.w, rect.h) / share * frame.zoom).toInt().coerceAtLeast(1)
-        val texture = textures.textureFor(image.image, onScreenEdge, decodeOn)
+        val texture = textures.textureFor(image.source, onScreenEdge, decodeOn)
         if (texture == 0) return
         val corners = FloatArray(8)
         // A mirrored picture lays each corner's texels on the opposite corner.
@@ -1071,14 +1092,28 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
 
     private fun drainEdits() {
         while (true) {
-            when (val edit = pending.poll() ?: break) {
-                is Edit.Upsert -> applyUpsert(edit)
-                is Edit.Wet -> applyWet(edit)
-                is Edit.Lift -> applyLift(edit)
-                is Edit.Remove -> applyRemove(edit.item)
-                is Edit.Order -> { activeLayerEnd = edit.activeLayerEnd; applyOrder(edit.items) }
-                is Edit.Reserve -> store.reserve(edit.vertices, edit.indices)
-                Edit.Reset -> applyReset()
+            val update = pending.poll() ?: break
+            for (edit in update.edits) {
+                when (edit) {
+                    is Edit.Upsert -> applyUpsert(edit)
+                    is Edit.Wet -> applyWet(edit)
+                    is Edit.Lift -> applyLift(edit)
+                    is Edit.Remove -> applyRemove(edit.item)
+                    is Edit.Order -> { activeLayerEnd = edit.activeLayerEnd; applyOrder(edit.items) }
+                    is Edit.SyncChanged -> {
+                        for ((item, mark) in edit.marks) records[item]?.sync = mark
+                        // Like every other record change, so a cache keyed on revision sees the fade.
+                        revision++
+                    }
+                    is Edit.Reserve -> store.reserve(edit.vertices, edit.indices)
+                    is Edit.Reset -> applyReset(edit.binding)
+                }
+            }
+            // Reset/rebuild and same-source geometry replacement must not revoke a source in
+            // the middle of an atomic update. Shared images survive until their last record exits.
+            if (imageSourcesChanged) {
+                textures.retainSources(imageBinding, imageSources.keys)
+                imageSourcesChanged = false
             }
         }
         reportMemory()
@@ -1100,7 +1135,8 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
         // An item edited in place keeps its depth: only a structural change reorders, and that
         // arrives as its own message.
         val previousZ = records[edit.item]?.z
-        applyRemove(edit.item)
+        val previousSource = records[edit.item]?.image?.source
+        applyRemove(edit.item, updateImages = false)
         val parts = ArrayList<Part>(edit.parts.size)
         for (part in edit.parts) {
             // A translucent run accumulates at full alpha and gets its alpha back at cover time,
@@ -1109,9 +1145,17 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
             val slice = store.put(part.mesh, baked) ?: continue
             parts.add(Part(slice, part.pass, part.color.withAlpha(255), part.color.a / 255.0, part.glow, part.covers))
         }
-        if (parts.isEmpty() && edit.image == null) return
-        val record = Record(edit.item, parts, edit.bounds, previousZ ?: nextZ++, edit.image)
+        if (parts.isEmpty() && edit.image == null) {
+            previousSource?.let(::removeImageSource)
+            return
+        }
+        val record = Record(edit.item, parts, edit.bounds, previousZ ?: nextZ++, edit.image, edit.sync)
         records[edit.item] = record
+        val source = edit.image?.source
+        if (previousSource !== source) {
+            previousSource?.let(::removeImageSource)
+            source?.let(::addImageSource)
+        }
         fileRecord(record)
     }
 
@@ -1180,9 +1224,10 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
         tailParts = emptyList()
     }
 
-    private fun applyRemove(item: CanvasItem) {
+    private fun applyRemove(item: CanvasItem, updateImages: Boolean = true) {
         revision++
         val record = records.remove(item) ?: return
+        if (updateImages) record.image?.source?.let(::removeImageSource)
         unfileRecord(record)
         for (part in record.parts) store.free(part.slice)
     }
@@ -1194,14 +1239,31 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
         for (i in items.indices) records[items[i]]?.z = i
     }
 
-    private fun applyReset() {
+    private fun applyReset(binding: Any?) {
         revision++
+        if (binding != null) imageBinding = binding
+        imageSources.clear()
+        imageSourcesChanged = true
         nextZ = 0
         lifted.clear()
         records.clear()
         buckets.clear()
         oversized.clear()
         store.clear()
+    }
+
+    private fun addImageSource(image: ImageData) {
+        val count = imageSources[image] ?: 0
+        imageSources[image] = count + 1
+        if (count == 0) imageSourcesChanged = true
+    }
+
+    private fun removeImageSource(image: ImageData) {
+        val count = checkNotNull(imageSources[image]) { "Missing scene image source" }
+        if (count == 1) {
+            imageSources.remove(image)
+            imageSourcesChanged = true
+        } else imageSources[image] = count - 1
     }
 
     // --- culling ---

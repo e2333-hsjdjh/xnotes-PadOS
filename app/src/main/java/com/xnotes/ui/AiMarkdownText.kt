@@ -18,6 +18,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.ui.graphics.Color
+import com.hrm.latex.renderer.Latex
+import com.hrm.latex.renderer.measure.LatexMeasurerState
+import com.hrm.latex.renderer.measure.rememberLatexMeasurer
+import com.hrm.latex.renderer.model.LatexConfig
+import com.hrm.latex.renderer.model.LatexTheme
 import com.xnotes.ai.AiMarkdown
 import com.xnotes.core.text.Paragraph
 import com.xnotes.core.text.ParaAlign
@@ -52,6 +62,10 @@ internal fun AiMarkdownText(source: String) {
                         MarkdownParagraph(p, Modifier.weight(1f))
                     }
                 }
+                is AiMarkdown.Block.Math -> Row(Modifier.fillMaxWidth().padding(start = Space.s12 * block.paragraph.indent)) {
+                    if (block.paragraph.quote != null) Text("│ ", color = palette.textDim.toComposeColor())
+                    DisplayMath(block.latex, block.pending, Modifier.weight(1f))
+                }
                 is AiMarkdown.Block.Code -> Column(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
                     .background(palette.surface.toComposeColor()).padding(start = Space.s12, end = Space.s4, bottom = Space.s12)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -83,14 +97,80 @@ internal fun AiMarkdownText(source: String) {
     }
 }
 
+/** Formulas inked in the text colour on a clear ground, [MathScale] larger than text of [size]. */
+@Composable
+private fun mathConfig(size: TextUnit): LatexConfig {
+    val ink = LocalPalette.current.text.toComposeColor()
+    return remember(ink, size) { LatexConfig(fontSize = size * TextSize.MathScale, theme = LatexTheme.light(color = ink, backgroundColor = Color.Transparent)) }
+}
+
+/**
+ * Whether [latex] can be typeset in this black-and-white UI: something to set, and nothing the
+ * library would paint in a colour of its own (`\color`, or the red it marks unknown commands in).
+ * Anything else stays as its LaTeX source, which is still readable and copyable.
+ */
+private fun typesets(latex: String): Boolean = runCatching {
+    val nodes = com.xnotes.platform.LatexInternals.parse(latex)
+    nodes.isNotEmpty() && !com.xnotes.platform.LatexInternals.ownColors(nodes)
+}.getOrDefault(false)
+
+/**
+ * A `$$…$$` or `\[…\]` equation: centred, scrolling sideways when wider than the answer. While it
+ * is still streaming in, or when it will not set, its source shows muted and wrapped instead.
+ */
+@Composable
+private fun DisplayMath(latex: String, pending: Boolean, modifier: Modifier = Modifier) {
+    val palette = LocalPalette.current
+    val ok = !pending && remember(latex) { typesets(latex) }
+    val config = mathConfig(TextSize.bodyLarge)
+    if (!ok) {
+        Text(latex.trim(), modifier.padding(vertical = Space.s4), fontFamily = FontFamily.Monospace,
+            fontSize = TextSize.body, color = palette.textDim.toComposeColor())
+        return
+    }
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val width = maxWidth
+        Box(Modifier.horizontalScroll(rememberScrollState())) {
+            Box(Modifier.widthIn(min = width).padding(vertical = Space.s4), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                Latex("\\displaystyle $latex", Modifier, config)
+            }
+        }
+    }
+}
+
 @Composable
 private fun MarkdownParagraph(p: Paragraph, modifier: Modifier = Modifier, header: Boolean = false) {
     val palette = LocalPalette.current
     val uriHandler = LocalUriHandler.current
+    val density = LocalDensity.current
     var linkError by remember { mutableStateOf(false) }
+    val fontSize = when (p.headingLevel) { 1 -> TextSize.display; 2 -> TextSize.headline; 3 -> TextSize.heading; 4, 5, 6 -> TextSize.title; else -> TextSize.bodyLarge }
+    val mathConfig = mathConfig(fontSize)
+    val measurer: LatexMeasurerState? = if (p.runs.any { it.style.math }) rememberLatexMeasurer(mathConfig) else null
+    // Inline formulas sit in the line as placeholders the size the measurer gives them; one in
+    // bold text or a header row is set bold like the words around it.
+    val formulas = p.runs.filter { it.style.math }.map { it.text to (it.style.bold || header) }
+    val sets = remember(formulas, mathConfig, measurer) {
+        formulas.distinct().associateWith { (latex, bold) ->
+            val source = listOfNotNull("\\boldsymbol{$latex}".takeIf { bold }, latex).firstOrNull { typesets(it) }
+            val size = source?.let { runCatching { measurer?.measure(it, mathConfig) }.getOrNull() }
+            if (size != null && size.widthPx > 0f && size.heightPx > 0f) source to size else null
+        }
+    }
+    val inline = mutableMapOf<String, InlineTextContent>()
+    var formula = 0
+    p.runs.forEachIndexed { index, run ->
+        if (!run.style.math) return@forEachIndexed
+        val (latex, size) = sets[formulas[formula++]] ?: return@forEachIndexed
+        inline["math$index"] = InlineTextContent(Placeholder(
+            with(density) { size.widthPx.toSp() }, with(density) { size.heightPx.toSp() }, PlaceholderVerticalAlign.TextCenter,
+        )) { Latex(latex, Modifier.fillMaxSize(), mathConfig) }
+    }
     val text = buildAnnotatedString {
-        p.runs.forEach { run ->
+        p.runs.forEachIndexed { index, run ->
             val style = run.style
+            // The source stands in when the text is copied.
+            if ("math$index" in inline) { appendInlineContent("math$index", run.text); return@forEachIndexed }
             withStyle(SpanStyle(
                 fontWeight = if (style.bold || header) FontWeight.Bold else FontWeight.Normal,
                 fontStyle = if (style.italic) FontStyle.Italic else FontStyle.Normal,
@@ -109,8 +189,8 @@ private fun MarkdownParagraph(p: Paragraph, modifier: Modifier = Modifier, heade
             }
         }
     }
-    Text(text, modifier, color = palette.text.toComposeColor(),
-        fontSize = when (p.headingLevel) { 1 -> TextSize.display; 2 -> TextSize.headline; 3 -> TextSize.heading; 4, 5, 6 -> TextSize.title; else -> TextSize.bodyLarge },
+    Text(text, modifier, color = palette.text.toComposeColor(), inlineContent = inline,
+        fontSize = fontSize,
         textAlign = when (p.align) { ParaAlign.CENTER -> TextAlign.Center; ParaAlign.RIGHT -> TextAlign.Right; else -> TextAlign.Start })
     if (linkError) AlertDialog(onDismissRequest = { linkError = false }, text = { Text(stringResource(com.xnotes.R.string.ai_link_failed)) },
         confirmButton = { TextButton(onClick = { linkError = false }) { Text(stringResource(com.xnotes.R.string.ai_ok)) } })

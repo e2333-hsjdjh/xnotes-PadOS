@@ -29,6 +29,19 @@ class InkFadeTest {
         assertFalse(fade.fades(ink(null, 50_000)))
     }
 
+    @Test fun aCapturedMarkKeepsItsFadeUntilTheRendererReceivesANewMark() {
+        val item = ink(2, 20)
+        val mark = item.sync
+        val fade = InkFade(rid = 2, playheadMs = 10)
+        item.sync = null
+
+        assertTrue(fade.fadesSync(mark))
+        assertFalse(fade.fades(item))
+        assertFalse(fade.fadesSync(item.sync))
+        assertFalse(fade.fadesSync(SyncMark(2, 10)))
+        assertFalse(fade.fadesSync(SyncMark(3, 20)))
+    }
+
     @Test fun eachRunOfFadedInkSharesOneLayer() {
         val items = listOf(ink(1, 0), ink(1, 20), ink(1, 30), ink(null, 0), ink(1, 40), ink(2, 99))
         val r = FakeRenderer()

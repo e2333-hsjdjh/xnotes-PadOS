@@ -1,0 +1,23 @@
+// Apply only to an isolated worktree; each worktree owns build/ and .cxx/.
+allprojects {
+    plugins.withId('com.android.application') {
+        def previewId = providers.gradleProperty('branchTestId').get()
+        def previewLabel = providers.gradleProperty('branchTestLabel').get()
+        def previewVersion = providers.gradleProperty('branchTestVersion').getOrElse('1').toInteger()
+        if (previewVersion < 1 || previewVersion > 2100000000) {
+            throw new GradleException('branchTestVersion must be between 1 and 2100000000')
+        }
+        if (!(previewId ==~ /[a-z][a-z0-9]*/)) {
+            throw new GradleException('branchTestId must contain lowercase ASCII letters/digits and start with a letter')
+        }
+        androidComponents.finalizeDsl { extension ->
+            extension.buildToolsVersion = '36.0.0'
+            extension.defaultConfig.applicationId = "com.xnotes.movinkpad.branchtest.${previewId}"
+            extension.defaultConfig.versionCode = previewVersion
+            extension.defaultConfig.resValue('string', 'branch_test_label', previewLabel)
+            extension.defaultConfig.manifestPlaceholders['appLabel'] = '@string/branch_test_label'
+            extension.buildTypes.getByName('debug').applicationIdSuffix = null
+            extension.buildTypes.getByName('debug').versionNameSuffix = "-test-${previewId}-${previewVersion}"
+        }
+    }
+}

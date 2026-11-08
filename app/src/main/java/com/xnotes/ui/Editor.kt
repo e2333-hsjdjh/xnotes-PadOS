@@ -1851,7 +1851,8 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         // (mode/rotation/scroll direction/scrollbar) into it before the first document lands.
         onViewSettingsChanged(com.xnotes.canvas.ViewSettings(), viewSettings)
         view.onKey = { e -> e.action == android.view.KeyEvent.ACTION_DOWN && handleKeyDown(e) }
-        controller.clipboardHasImage = { clipboardImageUri() != null }
+        // Asked on every touch-down to arm the paste menu: the description only, so no system notice.
+        controller.clipboardHasImage = { com.xnotes.platform.SystemClipboard.mayHoldImage(appContext) }
         controller.onMarkupTap = { at, withLink -> tapMarkup(at, withLink) }
         controller.onTap = { at -> tapClosesNotePeek(at) }
         controller.onAudioTap = { pageIndex, local -> tapAudio(pageIndex, local) }
@@ -8977,6 +8978,26 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         }
     }
 
+    /**
+     * Add a template the AI made in the new-note screen to the library, and select it as an imported
+     * one is: plain text as it is, a cover with a painted picture packaged with it first.
+     */
+    fun importGeneratedTemplate(made: com.xnotes.ai.AiTemplateGen.Generated) {
+        val picture = made.picture ?: return adoptTemplate { TemplateLibrary.importText(made.json) }
+        adoptTemplate {
+            val dir = appContext.cacheDir
+            val image = java.io.File.createTempFile("ai-cover", "." + picture.extension, dir)
+            val pkg = java.io.File.createTempFile("ai-cover", ".xtemplate", dir)
+            try {
+                image.writeBytes(picture.bytes)
+                com.xnotes.format.TemplatePackage.write(pkg, made.json, listOf(made.src to image))
+                TemplateLibrary.import(pkg, null)
+            } finally {
+                image.delete(); pkg.delete()
+            }
+        }
+    }
+
     /** Add a template this note carries, but the library lacks, to the library. */
     fun keepNoteTemplate(key: String) {
         val pkg = state.document.templatePackages[key]
@@ -9765,6 +9786,8 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             }.getOrNull()
         }
         if (json == null) { say(appContext.getString(R.string.split_invalid_file)); return false }
+        // Refused before detaching, so the current workspace stays as it is.
+        if (splitIncludesCanvas(json)) { say(appContext.getString(R.string.split_canvas_saved_unsupported)); return false }
         if (!detachWorkspaceForOpen(explicitlyDiscarded)) return false
         return openSavedSplit(json).also { if (it) persist() }
     }
@@ -9871,6 +9894,8 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         val json = splitWorkspace.read()
         if (!json.optBoolean("secondOpen")) return
         if (json.optBoolean("primaryOpen") && restoredPagedSession) noteOpen = true
+        // An older workspace that paired a canvas reopens only the primary pane's own session.
+        if (splitIncludesCanvas(json)) return
         splitReversed = json.optBoolean("reversed")
         splitRatio = json.optDouble("ratio", 0.5).toFloat().coerceIn(0.18f, 0.82f)
         splitSideBySide = if (json.has("sideBySide")) json.optBoolean("sideBySide") else null
@@ -9931,6 +9956,11 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     /** The pane that keyboard shortcuts and the file/export actions act on. */
     var focusedPane by mutableStateOf(Pane.PRIMARY)
+
+    /** The infinite canvas is a sketching surface that only opens on its own; saved splits from
+     *  before that rule may still name one, and are not restored as splits. */
+    private fun splitIncludesCanvas(json: org.json.JSONObject): Boolean =
+        json.optBoolean("primaryCanvas") || json.optBoolean("secondCanvas")
 
     /** True while two panes are open together. */
     val inSplit: Boolean get() = secondary?.noteOpen == true && noteOpen

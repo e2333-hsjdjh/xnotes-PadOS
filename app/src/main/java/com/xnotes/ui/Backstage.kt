@@ -2055,7 +2055,14 @@ private fun ExplorerSection(
                     }
                     createMode == CreateMode.CANVAS -> scope.launch {
                         val uri = withContext(Dispatchers.IO) { editor.createBlankCanvasFile(root, currentDocId, n) }
-                        if (uri != null) { onCreateMode(CreateMode.NONE); refreshKey++ } else fieldError = context.getString(R.string.err_create_canvas)
+                        if (uri != null) {
+                            onCreateMode(CreateMode.NONE)
+                            refreshKey++
+                            // Open straight away, like a new note: a canvas is for sketching on the spot.
+                            // In a split pane the open path refuses a canvas and says why; the new
+                            // file stays in the list to open on its own.
+                            callsNow.value.openFile(uri)
+                        } else fieldError = context.getString(R.string.err_create_canvas)
                     }
                     else -> scope.launch {
                         // Just create the note in the explorer — it opens only when the user taps it.

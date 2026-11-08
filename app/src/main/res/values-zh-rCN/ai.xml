@@ -117,7 +117,7 @@
     <string name="ai_models_fetched_title">供应商模型</string>
     <string name="ai_models_filter">筛选模型</string>
     <string name="ai_settings_provider">供应商</string>
-    <string name="ai_settings_models">模型</string>
+    <string name="ai_settings_models">聊天模型</string>
     <string name="ai_settings_models_note">新会话使用默认模型；可在输入栏为单个会话另选模型。</string>
     <string name="ai_models_empty">还没有模型。输入名称添加，或从供应商获取列表。</string>
     <string name="ai_models_add">添加模型</string>
@@ -162,7 +162,7 @@
     <string name="ai_provider_preset">预设</string>
     <string name="ai_provider_preset_note">填入名称和接口地址；仍需填写自己的 Key 和模型</string>
     <string name="ai_provider_preset_custom">自定义</string>
-    <string name="ai_provider_models_note">至少添加一个模型，使用该供应商要求的模型 ID。</string>
+    <string name="ai_provider_models_note">聊天模型或生图模型至少添加一个，使用该供应商要求的模型 ID。</string>
     <string name="ai_provider_delete">删除供应商</string>
     <string name="ai_provider_delete_confirm">删除此供应商？使用它的会话需要重新选择模型。</string>
     <string name="ai_provider_delete_do">删除</string>
@@ -180,4 +180,41 @@
     <string name="ai_preset_zhipu">智谱（GLM）</string>
     <string name="ai_preset_siliconflow">硅基流动</string>
     <string name="ai_preset_gemini">Google Gemini</string>
+
+    <!-- In-app template generation -->
+    <string name="ai_tpl_gen_title">在应用内生成</string>
+    <string name="ai_tpl_gen_about">点按「生成」后，你的要求和 xtemplate 格式说明会发送给 %1$s · %2$s；结果经检查后加入模板库。</string>
+    <string name="ai_tpl_gen_hint">描述想要的模板，例如：一周七列的习惯打卡表</string>
+    <string name="ai_tpl_gen_button">生成</string>
+    <string name="ai_tpl_gen_writing">正在生成模板…已收到 %1$d 字</string>
+    <string name="ai_tpl_gen_fixing">正在修正模板（第 %1$d / %2$d 次）…已收到 %3$d 字</string>
+    <string name="ai_tpl_gen_checking">正在检查模板…</string>
+    <string name="ai_tpl_gen_no_provider">在 AI 设置中添加模型供应商后，即可在应用内生成模板。</string>
+    <string name="ai_tpl_gen_open_settings">打开 AI 设置</string>
+    <string name="ai_tpl_gen_cover_note">未设置图像模型时，应用内生成的封面只用图形和文字绘制；在 AI 设置中设置图像模型即可生成图片，也可使用下方的其他 AI 助手。</string>
+    <string name="ai_tpl_gen_examples">示例（点按填入）</string>
+    <string name="ai_tpl_external">使用其他 AI 助手</string>
+    <string name="ai_tpl_external_about">适合带图片的封面：把格式说明交给 ChatGPT、Claude 等助手，再导入它生成的文件。</string>
+    <string name="ai_prompt_cover_frame">一个封面模板：可调颜色的深蓝底色，距页边 12 毫米处画细金色双线边框，在页面上方三分之一处放一个米色标题标签。</string>
+    <string name="ai_prompt_cover_stripes">一个封面模板：可调底色上铺斜向细条纹，靠近底部放一个白色标题标签。</string>
+    <string name="ai_tpl_gen_picture_note">画面描述会发送给 %1$s · %2$s 生成图片，供应商可能按张计费。</string>
+    <string name="ai_tpl_gen_painting">正在生成图片…</string>
+    <string name="ai_prompt_cover_paint_pines">一个封面：柔和水彩风格的黎明时分雾气弥漫的松林，靠近顶部放一个白色小标题标签。</string>
+    <string name="ai_prompt_cover_paint_leather">一个仿深棕色皮革的封面，带压印边框和金色标题标签。</string>
+    <string name="ai_prompt_cover_paint_circles">一个封面：深蓝与青绿半透明圆形相互重叠的生成式图案，加细金色边框和标题标签。</string>
+    <string name="ai_settings_image">图像模型</string>
+    <string name="ai_settings_image_note">用于在新建笔记中生成封面图片。从各供应商的生图模型中选择；在供应商设置中添加或获取生图模型。</string>
+    <string name="ai_image_none">不使用</string>
+    <string name="ai_image_model_hint">例如 gpt-image-1</string>
+    <string name="ai_models_image">生图模型</string>
+    <string name="ai_models_image_note">用于在新建笔记中生成封面图片。需要供应商提供 OpenAI 兼容的图像接口（/images/generations），例如 OpenAI 的 gpt-image。</string>
+    <string name="ai_models_image_empty">还没有生图模型。输入名称添加，或从供应商获取后勾选。</string>
+    <string name="ai_models_image_add">添加生图模型</string>
+    <string name="ai_models_other">其他（可能不能用于聊天）</string>
+    <string name="ai_provider_image_count">生图 %1$d</string>
+    <string name="ai_tpl_gen_text_model">文字模型</string>
+    <string name="ai_tpl_gen_image_model">图像模型</string>
+    <string name="ai_tpl_gen_default">默认（%1$s）</string>
+    <string name="ai_tpl_gen_picture_title">生成图片</string>
+    <string name="ai_tpl_gen_image_model_needed">在 AI 设置的供应商中添加生图模型后，即可生成图片。</string>
 </resources>

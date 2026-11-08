@@ -32,6 +32,30 @@ class InfiniteDocumentTest {
         override fun onReset() { log += "reset" }
     }
 
+    /** Appends keep the cached z map current instead of dropping it; every other edit rebuilds it. */
+    @Test fun zOrderStaysCorrectAcrossAppendsAfterTheMapWasBuilt() {
+        val doc = InfiniteDocument()
+        val all = Rect(-100.0, -100.0, 400.0, 400.0)
+        val a = boxAt(0.0, 0.0); val b = boxAt(5.0, 5.0)
+        doc.add(a); doc.add(b)
+        assertEquals(listOf<CanvasItem>(a, b), doc.itemsIn(all)) // builds the map
+        val c = boxAt(2.0, 2.0)
+        doc.add(c)
+        assertEquals(listOf<CanvasItem>(a, b, c), doc.itemsIn(all))
+        assertTrue(doc.holds(c))
+        val d = boxAt(1.0, 1.0)
+        doc.add(0, d) // an insert below shifts every position
+        assertEquals(listOf<CanvasItem>(d, a, b, c), doc.itemsIn(all))
+        val e = boxAt(3.0, 3.0); val f = boxAt(4.0, 4.0)
+        doc.addAll(listOf(e, f))
+        assertEquals(listOf<CanvasItem>(d, a, b, c, e, f), doc.itemsIn(all))
+        doc.remove(b)
+        val g = boxAt(6.0, 6.0)
+        doc.add(g)
+        assertEquals(listOf<CanvasItem>(d, a, c, e, f, g), doc.itemsIn(all))
+        assertTrue(!doc.holds(b))
+    }
+
     /** The writer's snapshot: its own list, the same items, and immune to edits made during a save. */
     @Test fun snapshotForWriteSharesItemsOverItsOwnList() {
         val doc = InfiniteDocument()

@@ -44,4 +44,44 @@ class AiMarkdownTest {
         assertTrue(prose.any { it.marker == "☐" })
         assertTrue(AiMarkdown.parse("").isEmpty())
     }
+    @Test fun mathDelimitersFromModelsBecomeFormulas() {
+        val source = "设 \\(a^2+b^2=c^2\\)，且 \$x_1\$ 为根。\n\n\$\$\n\\int_0^1 x\\,dx\n\$\$\n\n\\[\n\\frac{1}{2}\n\\]"
+        val blocks = AiMarkdown.parse(source)
+        val inline = blocks.filterIsInstance<AiMarkdown.Block.Prose>().first().paragraph.runs.filter { it.style.math }.map { it.text }
+        assertEquals(listOf("a^2+b^2=c^2", "x_1"), inline)
+        val display = blocks.filterIsInstance<AiMarkdown.Block.Math>()
+        assertEquals(listOf("\\int_0^1 x\\,dx", "\\frac{1}{2}"), display.map { it.latex.trim() })
+        assertTrue(display.none { it.pending })
+    }
+    @Test fun pricesStayProseLikeRemarkMath() {
+        for (text in listOf("价格 \$5 和 \$10", "价格 \$5-\$10 元", "价格 \$5，\$10", "\$5 and 10\$", "公式 \$ x \$ 空格", "a \\\$x\\\$ b")) {
+            val runs = AiMarkdown.parse(text).filterIsInstance<AiMarkdown.Block.Prose>().flatMap { it.paragraph.runs }
+            assertTrue(text, runs.none { it.style.math })
+            assertEquals(text, text.replace("\\\$", "\$"), runs.joinToString("") { it.text })
+        }
+        val formula = AiMarkdown.parse("当 \$x=5\$ 时，\$y_{10}\$ 与 \$2x+1\$").filterIsInstance<AiMarkdown.Block.Prose>().single()
+        assertEquals(listOf("x=5", "y_{10}", "2x+1"), formula.paragraph.runs.filter { it.style.math }.map { it.text })
+    }
+    @Test fun codeKeepsDollarsAndBackslashesVerbatim() {
+        assertEquals("`\$5 and \$10` \\\$", AiMath.normalize("`\$5 and \$10` \$"))
+        val fenced = "```sh\necho \$HOME \$1\n```\n> ~~~\n> \$a \$b\n> ~~~"
+        assertEquals(fenced, AiMath.normalize(fenced))
+        val code = AiMarkdown.parse("```sh\necho \$HOME\n```").filterIsInstance<AiMarkdown.Block.Code>().single()
+        assertEquals("echo \$HOME", code.text)
+    }
+    @Test fun displayFormulaStillStreamingIsPendingUntilItCloses() {
+        val partial = AiMarkdown.parse("前文\n\n\$\$\n\\frac{a}{").filterIsInstance<AiMarkdown.Block.Math>().single()
+        assertTrue(partial.pending)
+        val bracket = AiMarkdown.parse("前文\n\n\\[\n\\frac{a}{").filterIsInstance<AiMarkdown.Block.Math>()
+        assertTrue(bracket.all { it.pending })
+        val done = AiMarkdown.parse("前文\n\n\$\$\n\\frac{a}{b}\n\$\$\n").filterIsInstance<AiMarkdown.Block.Math>().single()
+        assertFalse(done.pending)
+        val source = "说明 \$x^2\$ 与\n\n\$\$\n\\sum_{i=1}^n i\n\$\$\n\n价格 \$5-\$10"
+        for (length in 0..source.length) AiMarkdown.parse(source.take(length))
+    }
+    @Test fun boldFormulasParseInTheBundledRenderer() {
+        val nodes = com.xnotes.platform.LatexInternals.parse("\\boldsymbol{x^2}")
+        assertTrue(nodes.isNotEmpty())
+        assertFalse(com.xnotes.platform.LatexInternals.ownColors(nodes))
+    }
 }

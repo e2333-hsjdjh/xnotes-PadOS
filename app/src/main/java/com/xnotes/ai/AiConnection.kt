@@ -24,9 +24,13 @@ data class AiProvider(
     val name: String = "", val url: String = "", val key: String = "",
     val models: List<String> = emptyList(),
     val thinkingFormat: String = AiThinking.AUTO,
+    /** Models this provider paints pictures with (its Images API), kept apart from the chat [models]. */
+    val imageModels: List<String> = emptyList(),
 ) {
-    /** The saved models in the user's order, trimmed and without repeats. */
+    /** The saved chat models in the user's order, trimmed and without repeats. */
     val modelChoices: List<String> get() = models.map(String::trim).filter(String::isNotEmpty).distinct()
+    /** The saved image models, likewise. */
+    val imageChoices: List<String> get() = imageModels.map(String::trim).filter(String::isNotEmpty).distinct()
     /** The label, else the endpoint host, so an unnamed provider still reads as something. */
     val label: String get() = name.trim().ifEmpty { runCatching { java.net.URI(url.trim()).host }.getOrNull().orEmpty().ifEmpty { url.trim() } }
 }
@@ -50,7 +54,16 @@ data class AiConfig(
     val attachPdfByDefault: Boolean = false,
     val providers: List<AiProvider> = emptyList(),
     val provider: String = "",
+    /** The provider and model that paint pictures (an OpenAI-style Images API); none when [imageModel] is blank. */
+    val imageProvider: String = "",
+    val imageModel: String = "",
 ) {
+    /** This setup sending picture requests to [imageModel] through [imageProvider]; null when none is set up. */
+    fun imageRoute(): AiConfig? {
+        val model = imageModel.trim().takeIf { it.isNotEmpty() } ?: return null
+        val p = providerOf(imageProvider) ?: return null
+        return copy(provider = p.id, url = p.url, key = p.key, models = p.modelChoices, thinkingFormat = p.thinkingFormat, model = model)
+    }
     /** The saved pick list in the user's order, always holding the default model. */
     val modelChoices: List<String> get() = (if (model.trim() in models.map(String::trim)) models else listOf(model) + models).map(String::trim).filter(String::isNotEmpty).distinct()
     /** PDF tool steps must return bare JSON: no thinking, no user prompt. */
@@ -70,8 +83,11 @@ data class AiConfig(
      * moves to the first provider and its first model, so settings never save a dangling default.
      */
     fun withValidDefault(): AiConfig {
-        val p = providerOf(provider) ?: providers.firstOrNull() ?: return copy(provider = "", model = "", url = "", key = "", models = emptyList())
-        return route(p.id, model.trim().takeIf { it in p.modelChoices } ?: p.modelChoices.firstOrNull().orEmpty())
+        // A picture model whose provider is gone, or no longer lists it, is dropped, never moved to another provider.
+        val image = if (providerOf(imageProvider)?.imageChoices?.contains(imageModel.trim()) != true) copy(imageProvider = "", imageModel = "") else this
+        val p = providerOf(provider) ?: providers.firstOrNull { it.modelChoices.isNotEmpty() } ?: providers.firstOrNull()
+            ?: return image.copy(provider = "", model = "", url = "", key = "", models = emptyList())
+        return image.route(p.id, model.trim().takeIf { it in p.modelChoices } ?: p.modelChoices.firstOrNull().orEmpty())
     }
     /** The provider a model picked before providers existed belongs to: the default's if it lists it. */
     fun ownerOf(model: String): String? =
@@ -131,7 +147,8 @@ class AiConfigStore(context: Context) {
             val list = org.json.JSONArray()
             providers.forEach { p ->
                 list.put(JSONObject().put("id", p.id).put("name", p.name.trim()).put("url", p.url.trim()).put("key", p.key.trim())
-                    .put("models", org.json.JSONArray(p.modelChoices)).put("thinkingFormat", p.thinkingFormat))
+                    .put("models", org.json.JSONArray(p.modelChoices)).put("thinkingFormat", p.thinkingFormat)
+                    .put("imageModels", org.json.JSONArray(p.imageChoices)))
             }
             val model = config.model.trim()
             val defaultModels = current?.modelChoices.orEmpty()
@@ -142,6 +159,7 @@ class AiConfigStore(context: Context) {
                 .put("maxTokens", config.maxTokens).put("instructions", config.instructions.trim())
                 .put("searchByDefault", config.searchByDefault).put("attachPdfByDefault", config.attachPdfByDefault)
                 .put("providers", list).put("provider", current?.id.orEmpty())
+                .put("imageProvider", config.imageProvider).put("imageModel", config.imageModel.trim())
         }
 
         /** A stored setup, resolved to its default route; one from before providers becomes [LEGACY_PROVIDER]. */
@@ -149,16 +167,23 @@ class AiConfigStore(context: Context) {
             fun strings(from: JSONObject) = from.optJSONArray("models")?.let { list -> (0 until list.length()).mapNotNull { list.opt(it) as? String } } ?: emptyList()
             fun format(from: JSONObject) = from.optString("thinkingFormat", AiThinking.AUTO).takeIf { it in AiThinking.FORMATS } ?: AiThinking.AUTO
             val model = json.optString("model", "")
-            val providers = json.optJSONArray("providers")?.let { list ->
+            var providers = json.optJSONArray("providers")?.let { list ->
                 (0 until list.length()).mapNotNull { list.optJSONObject(it) }.mapNotNull { p ->
                     val id = (p.opt("id") as? String)?.takeIf(String::isNotBlank) ?: return@mapNotNull null
-                    AiProvider(id, p.optString("name", ""), p.optString("url", ""), p.optString("key", ""), strings(p), format(p))
+                    val images = p.optJSONArray("imageModels")?.let { list -> (0 until list.length()).mapNotNull { list.opt(it) as? String } } ?: emptyList()
+                    AiProvider(id, p.optString("name", ""), p.optString("url", ""), p.optString("key", ""), strings(p), format(p), images)
                 }.distinctBy { it.id }
             } ?: run {
                 val url = json.optString("url", ""); val key = json.optString("key", "")
                 val legacyModels = strings(json).let { if (model.isBlank() || model in it) it else listOf(model) + it }
                 if (url.isBlank() && key.isBlank() && legacyModels.isEmpty()) emptyList()
                 else listOf(AiProvider(LEGACY_PROVIDER, "", url, key, legacyModels, format(json)))
+            }
+            // An image model saved before providers listed their own joins its provider's image list.
+            val imageProviderId = json.optString("imageProvider", "")
+            val savedImageModel = json.optString("imageModel", "").trim()
+            if (savedImageModel.isNotEmpty()) providers = providers.map { p ->
+                if (p.id == imageProviderId && savedImageModel !in p.imageChoices) p.copy(imageModels = p.imageChoices + savedImageModel) else p
             }
             val provider = json.optString("provider", "").takeIf { id -> providers.any { it.id == id } } ?: providers.firstOrNull()?.id.orEmpty()
             val config = AiConfig(searchKey = json.optString("searchKey", ""),
@@ -167,16 +192,21 @@ class AiConfigStore(context: Context) {
                 // A config saved before prompts existed gets the default; an emptied prompt stays empty.
                 instructions = if (json.has("instructions")) json.optString("instructions", "") else defaultInstructions,
                 searchByDefault = json.optBoolean("searchByDefault", false), attachPdfByDefault = json.optBoolean("attachPdfByDefault", false),
-                providers = providers, provider = provider)
+                providers = providers, provider = provider,
+                imageProvider = json.optString("imageProvider", "").takeIf { id -> providers.any { it.id == id } }.orEmpty(),
+                imageModel = json.optString("imageModel", "").trim())
+                .let { if (it.imageProvider.isEmpty()) it.copy(imageModel = "") else it }
             return if (providers.isEmpty()) config.copy(model = model) else config.route(provider, model)
         }
 
         /** What one provider needs before it can be kept: an HTTPS endpoint, a key and at least one model. */
         fun validateProvider(p: AiProvider) {
             AiProtocol.endpoint(p.url)
-            require(p.key.isNotBlank() && p.modelChoices.isNotEmpty()) { AiText.t(AiMsg.CONFIG_MODEL_KEY_REQUIRED) }
+            // A provider may serve chat, pictures or both; it needs at least one model of either kind.
+            require(p.key.isNotBlank() && (p.modelChoices.isNotEmpty() || p.imageChoices.isNotEmpty())) { AiText.t(AiMsg.CONFIG_MODEL_KEY_REQUIRED) }
             require(!p.key.contains('\n') && !p.key.contains('\r')) { AiText.t(AiMsg.CONFIG_KEY_INVALID) }
-            require(p.modelChoices.size <= AiProtocol.MAX_MODELS) { AiText.t(AiMsg.CONFIG_TOO_MANY_MODELS, AiProtocol.MAX_MODELS) }
+            require(p.modelChoices.size <= AiProtocol.MAX_MODELS && p.imageChoices.size <= AiProtocol.MAX_MODELS) { AiText.t(AiMsg.CONFIG_TOO_MANY_MODELS, AiProtocol.MAX_MODELS) }
+            require((p.modelChoices + p.imageChoices).all { it.length <= 200 && it.none { c -> c == '\n' || c == '\r' } }) { AiText.t(AiMsg.CONFIG_IMAGE_MODEL_INVALID) }
             require(p.thinkingFormat in AiThinking.FORMATS) { AiText.t(AiMsg.CONFIG_THINKING_INVALID) }
         }
 
@@ -197,6 +227,12 @@ class AiConfigStore(context: Context) {
             require(config.maxTokens in AiProtocol.MIN_MAX_TOKENS..AiProtocol.MAX_MAX_TOKENS) { AiText.t(AiMsg.CONFIG_MAX_TOKENS_INVALID, AiProtocol.MIN_MAX_TOKENS, AiProtocol.MAX_MAX_TOKENS) }
             require(config.instructions.length <= AiProtocol.MAX_INSTRUCTIONS) { AiText.t(AiMsg.CONFIG_INSTRUCTIONS_TOO_LONG, AiProtocol.MAX_INSTRUCTIONS) }
             require(config.effort in AiThinking.LEVELS) { AiText.t(AiMsg.CONFIG_THINKING_INVALID) }
+            val imageModel = config.imageModel.trim()
+            if (imageModel.isNotEmpty()) {
+                val p = config.providerOf(config.imageProvider)
+                require(p != null) { AiText.t(AiMsg.CONFIG_IMAGE_PROVIDER_REQUIRED) }
+                require(imageModel in p.imageChoices) { AiText.t(AiMsg.CONFIG_IMAGE_MODEL_INVALID) }
+            }
         }
     }
 }
@@ -218,10 +254,31 @@ interface AiTransport {
         stream(config, messages) { text.append(it); delta(it) }
         return AiReply(text.toString())
     }
+    /** A picture for [prompt] from [config]'s image model (see [AiImages]). */
+    fun image(config: AiConfig, prompt: String): AiImage = throw IllegalStateException(AiText.t(AiMsg.IMAGE_MODEL_REQUIRED))
 }
 
 /** One request, no redirects/retries/logging; cancellation closes the active socket. */
 class AiConnection(private val openConnection: (String) -> HttpURLConnection = { URL(it).openConnection() as HttpURLConnection }) : AiTransport {
+    companion object {
+        /** A failed request's message, with the provider's reason when it gave one. */
+        fun httpFailure(status: Int, detail: String): String =
+            if (detail.isEmpty()) AiText.t(AiMsg.REQUEST_HTTP_FAILED, status) else AiText.t(AiMsg.REQUEST_HTTP_FAILED_DETAIL, status, detail)
+
+        /** At most 64 KiB of an error response, or "" when there is none to read. */
+        private fun errorBody(conn: HttpURLConnection): String = runCatching {
+            conn.errorStream?.use { input ->
+                val bytes = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                while (bytes.size() < 65536) {
+                    val n = input.read(buffer, 0, minOf(buffer.size, 65536 - bytes.size()))
+                    if (n < 0) break
+                    bytes.write(buffer, 0, n)
+                }
+                bytes.toString(Charsets.UTF_8.name())
+            }
+        }.getOrNull().orEmpty()
+    }
     @Volatile private var connection: HttpURLConnection? = null
     @Volatile private var cancelled = false
     override fun cancel() { cancelled = true; connection?.disconnect() }
@@ -262,6 +319,40 @@ class AiConnection(private val openConnection: (String) -> HttpURLConnection = {
             return result.toString()
         } finally { conn.disconnect(); connection = null }
     }
+    override fun image(config: AiConfig, prompt: String): AiImage {
+        require(config.key.isNotBlank() && !config.key.contains('\n') && !config.key.contains('\r')) { AiText.t(AiMsg.PROVIDER_NOT_CONFIGURED) }
+        val bytes = AiImages.request(config.model, prompt).toString().toByteArray(Charsets.UTF_8)
+        check(!cancelled) { AiText.t(AiMsg.CONNECTION_STOPPED) }
+        val conn = openConnection(AiImages.endpoint(config.url))
+        connection = conn
+        try {
+            check(!cancelled) { AiText.t(AiMsg.CONNECTION_STOPPED) }
+            conn.instanceFollowRedirects = false
+            conn.connectTimeout = 15000
+            // Painting takes a while; a picture is one long response, not a stream.
+            conn.readTimeout = 240000
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.setRequestProperty("Authorization", "Bearer ${config.key}")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setFixedLengthStreamingMode(bytes.size)
+            conn.outputStream.use { it.write(bytes) }
+            val status = conn.responseCode
+            check(status in 200..299) { httpFailure(status, AiProtocol.providerError(errorBody(conn), config.key)) }
+            val result = StringBuilder()
+            conn.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+                val buffer = CharArray(64 * 1024)
+                while (!cancelled) {
+                    val count = reader.read(buffer)
+                    if (count < 0) break
+                    check(result.length + count <= AiImages.MAX_RESPONSE) { AiText.t(AiMsg.IMAGE_TOO_LARGE) }
+                    result.append(buffer, 0, count)
+                }
+            }
+            check(!cancelled) { AiText.t(AiMsg.CONNECTION_STOPPED) }
+            return AiImages.decode(result.toString())
+        } finally { conn.disconnect(); connection = null }
+    }
     /** The provider's OpenAI-style model list (GET /models); sent only when the user asks for it in settings. */
     fun listModels(url: String, key: String): List<String> {
         require(key.isNotBlank() && !key.contains('\n') && !key.contains('\r')) { AiText.t(AiMsg.CONFIG_MODEL_KEY_REQUIRED) }
@@ -293,7 +384,25 @@ class AiConnection(private val openConnection: (String) -> HttpURLConnection = {
     override suspend fun stream(config: AiConfig, messages: List<AiMessage>, delta: suspend (String) -> Unit) {
         complete(config, messages, emptyList(), null, "auto", delta)
     }
+    /** The request refused the thinking field it carried; nothing of the answer has arrived yet. */
+    private class ThinkingRefused : Exception()
+
+    /**
+     * Models without reasoning refuse a thinking level (OpenAI's GPT-4o answers `reasoning_effort` with
+     * HTTP 400), so a refusal that names the field is sent again once without it, and the model and level
+     * are then sent without it for the rest of the session. The reply says so.
+     */
     override suspend fun complete(config: AiConfig, messages: List<AiMessage>, tail: List<JSONObject>, tools: org.json.JSONArray?, toolChoice: String, delta: suspend (String) -> Unit): AiReply {
+        if (AiThinking.refuses(config)) return send(config.copy(effort = ""), messages, tail, tools, toolChoice, delta).copy(thinkingDropped = true)
+        return try {
+            send(config, messages, tail, tools, toolChoice, delta)
+        } catch (e: ThinkingRefused) {
+            AiThinking.markRefused(config)
+            send(config.copy(effort = ""), messages, tail, tools, toolChoice, delta).copy(thinkingDropped = true)
+        }
+    }
+
+    private suspend fun send(config: AiConfig, messages: List<AiMessage>, tail: List<JSONObject>, tools: org.json.JSONArray?, toolChoice: String, delta: suspend (String) -> Unit): AiReply {
         val conn = openConnection(AiProtocol.endpoint(config.url))
         connection = conn
         try {
@@ -311,9 +420,12 @@ class AiConnection(private val openConnection: (String) -> HttpURLConnection = {
             conn.setFixedLengthStreamingMode(bytes.size)
             conn.outputStream.use { it.write(bytes) }
             val status = conn.responseCode
+            // The provider's own reason, so a rejected request says what it was rejected for.
+            val detail = if (status in 200..299) "" else AiProtocol.providerError(errorBody(conn), config.key)
+            if ((status == 400 || status == 422) && AiThinking.refused(detail, config.effort, config.thinkingFormat, config.url)) throw ThinkingRefused()
             // A request rejected only because it offered tools: the caller answers without them and says so.
-            if (tools != null && (status == 400 || status == 422)) throw AiToolsUnsupported(status)
-            check(status in 200..299) { AiText.t(AiMsg.REQUEST_HTTP_FAILED, status) }
+            if (tools != null && (status == 400 || status == 422)) throw AiToolsUnsupported(status, detail)
+            check(status in 200..299) { httpFailure(status, detail) }
             val calls = AiToolCallAssembler(AiProtocol.replyBudget(config.maxTokens))
             val streamLimit = AiProtocol.streamBudget(config.maxTokens)
             val content = StringBuilder()

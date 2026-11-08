@@ -8,11 +8,14 @@ import org.json.JSONObject
 /** A tool call the model asked for, assembled from streamed fragments; [arguments] is its raw JSON text. */
 data class AiToolCall(val id: String, val name: String, val arguments: String)
 
-/** One streamed completion: its text, reasoning to hand back alongside tool calls, and the calls. */
-data class AiReply(val content: String = "", val reasoning: String = "", val calls: List<AiToolCall> = emptyList())
+/**
+ * One streamed completion: its text, reasoning to hand back alongside tool calls, and the calls.
+ * [thinkingDropped] when it went without the chosen thinking level, which the model refuses.
+ */
+data class AiReply(val content: String = "", val reasoning: String = "", val calls: List<AiToolCall> = emptyList(), val thinkingDropped: Boolean = false)
 
 /** The provider rejected a request that offered tools: the model or API cannot take tool calls. */
-class AiToolsUnsupported(val status: Int) : IllegalStateException(AiText.t(AiMsg.REQUEST_HTTP_FAILED, status))
+class AiToolsUnsupported(val status: Int, detail: String = "") : IllegalStateException(AiConnection.httpFailure(status, detail))
 
 /**
  * Collects Chat Completions stream chunks into tool calls. Fragments arrive per `index`: the id and
@@ -88,10 +91,13 @@ object AiWebTools {
     fun guidance(today: java.time.LocalDate = java.time.LocalDate.now()): String =
         "$GUIDANCE\n- 今天是 $today（本机日期）。涉及“最新”“今年”等时间时，按这个日期写检索词并判断资料是否过时。"
 
-    /** [messages] with [LIMIT_NOTICE] added to the last tool result. */
-    fun withLimitNotice(messages: List<JSONObject>): List<JSONObject> = messages.mapIndexed { index, message ->
-        if (index != messages.lastIndex) message
-        else JSONObject(message.toString()).put("content", message.getString("content") + "\n\n（$LIMIT_NOTICE）")
+    /** [messages] with [notice] added to the last tool result; a following page-image message is left as it is. */
+    fun withLimitNotice(messages: List<JSONObject>, notice: String = LIMIT_NOTICE): List<JSONObject> {
+        val last = messages.indexOfLast { it.optString("role") == "tool" }
+        return messages.mapIndexed { index, message ->
+            if (index != last) message
+            else JSONObject(message.toString()).put("content", message.getString("content") + "\n\n（$notice）")
+        }
     }
 
     fun definitions(): JSONArray = JSONArray()

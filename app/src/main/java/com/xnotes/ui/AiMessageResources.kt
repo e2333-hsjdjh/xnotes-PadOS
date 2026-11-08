@@ -16,6 +16,7 @@ internal fun AiMsg.resId(): Int = when (this) {
     AiMsg.SEARCH_RESPONSE_TOO_LARGE -> R.string.ai_msg_search_response_too_large
     AiMsg.REQUEST_TOO_LARGE -> R.string.ai_msg_request_too_large
     AiMsg.REQUEST_HTTP_FAILED -> R.string.ai_msg_request_http_failed
+    AiMsg.REQUEST_HTTP_FAILED_DETAIL -> R.string.ai_msg_request_http_failed_detail
     AiMsg.ANSWER_TOO_LONG -> R.string.ai_msg_answer_too_long
     AiMsg.PROVIDER_ERROR -> R.string.ai_msg_provider_error
     AiMsg.CONNECTION_ENDED_EARLY -> R.string.ai_msg_connection_ended_early
@@ -93,6 +94,15 @@ internal fun AiMsg.resId(): Int = when (this) {
     AiMsg.STOPPED_BY_USER -> R.string.ai_msg_stopped_by_user
     AiMsg.REQUEST_FAILED -> R.string.ai_msg_request_failed
     AiMsg.NETWORK_ERROR -> R.string.ai_msg_network_error
+    AiMsg.TEMPLATE_GEN_EMPTY -> R.string.ai_msg_template_gen_empty
+    AiMsg.TEMPLATE_GEN_TOO_LONG -> R.string.ai_msg_template_gen_too_long
+    AiMsg.TEMPLATE_GEN_FAILED -> R.string.ai_msg_template_gen_failed
+    AiMsg.CONFIG_IMAGE_PROVIDER_REQUIRED -> R.string.ai_msg_config_image_provider_required
+    AiMsg.CONFIG_IMAGE_MODEL_INVALID -> R.string.ai_msg_config_image_model_invalid
+    AiMsg.IMAGE_MODEL_REQUIRED -> R.string.ai_msg_image_model_required
+    AiMsg.IMAGE_INVALID_REPLY -> R.string.ai_msg_image_invalid_reply
+    AiMsg.IMAGE_TOO_LARGE -> R.string.ai_msg_image_too_large
+    AiMsg.THINKING_UNSUPPORTED -> R.string.ai_msg_thinking_unsupported
 }
 
 /** Routes AI backend messages through Android resources so they follow the app locale. */

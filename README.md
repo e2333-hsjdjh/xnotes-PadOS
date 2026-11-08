@@ -6,7 +6,9 @@
 
 从 [GitHub Releases](https://github.com/Hshevin/xnotes-android/releases) 下载本 fork 的 **ARM64 APK**，在平板上打开安装。已安装本 fork 正式版的用户可用同签名的新版本直接覆盖升级。分支测试包使用独立包名，可与正式版并存，各自保存数据；旧 AI 和双窗格专用测试包不再纳入本地打包。当前分支测试包见[本地交付与验证记录](docs/movinkpad/branch-tests-2026-11-05.md)。
 
-最新本地覆盖更新：[Release 91 ARM64 APK](build/xnotes/XNotes-0.9.7-movinkpad-release91-arm64.apk)，沿用正式包名与签名，包含图层、按键录入、共享 PDF 存储和侧栏更新。验证与设备验收边界见 [Release 91 记录](docs/movinkpad/release-2026-11-02.md#release-91主分支功能合并2026-11-05)，尚未发布到 GitHub。
+最新本地覆盖更新：[0.9.8 / Release 98 ARM64 APK](build/xnotes/XNotes-0.9.8-movinkpad-release98-arm64.apk)，沿用正式包名与签名，包含 AI 模板文字 / 图像模型自选，以及无限画布退出分屏黑屏的候选修复（待真机确认）。见 [打包与验证记录](docs/movinkpad/release98-2026-11-07.md)。APK 仅本地交付，日志推送远端，不发布 GitHub Release。
+
+最新主线独立测试版：[master test3 ARM64 APK](build/branch-tests/master-test3/XNotes-master-6f00c91b-test3-arm64.apk)，包名 `com.xnotes.movinkpad.branchtest.master`，与正式版并存，数据独立。包含图片解码、光晕缓存、场景更新和新建画布直接打开等更新，目标设备效果待确认。见 [打包记录](docs/movinkpad/master-test3-2026-11-08.md)。
 
 分支测试更新：图层与按键录入已更新至 test2，可覆盖各自 test1；新增图层侧栏/缩略图及按键交接、取消、工具栏高亮修复，见[打包记录](docs/movinkpad/branch-tests-2026-11-05.md#test2远端分支更新)。
 
@@ -14,8 +16,8 @@
 
 - **手写笔记**：使用分页笔记或无限画布，混排手写、文字和图片。
 - **PDF 批注**：导入 PDF，在页面上手写或标注文字，保留原始 PDF。
-- **双窗格**：并排打开笔记、PDF 或无限画布，也可同时查看同一份分页文档的两个位置。
-- **手写笔快捷键（Release 91）**：在「设置 → 输入 → 手写笔按键映射」先录入实体按键，再命名并分配工具、撤销或重做。工具支持按住临时使用或按一下切换；临时使用保持工具栏原有选中状态。旧 Pro Pen 3 配置不迁移，需重新录入。Release 90 及以前仍使用原三键设置。
+- **双窗格**：并排打开笔记或 PDF，也可同时查看同一份分页文档的两个位置。无限画布专供画画与草稿，只能单独打开，不进入分屏（[说明](docs/movinkpad/canvas-sketch-only-2026-11-07.md)）。
+- **手写笔快捷键**：在「设置 → 输入 → 手写笔按键映射」先录入实体按键，再命名并分配工具、撤销或重做。工具支持按住临时使用或按一下切换；临时使用保持工具栏原有选中状态。Release 92 起可为每个录入按键另设双击动作，并调整双击间隔，也可绑定切换上一个工具、橡皮擦或平移。旧 Pro Pen 3 配置不迁移，需重新录入。Release 90 及以前仍使用原三键设置。
 - **黑白界面**：支持浅色和夜间模式，以灰阶区分界面层级。
 - **可选 AI**：在设置中添加一个或多个模型供应商（各自的地址、API 密钥和模型），在输入栏按供应商切换模型，从主菜单打开聊天，或在文档截图后选择「AI」。主动发送时才会将当前对话及所选截图或 PDF 内容发送给配置的供应商；联网搜索默认关闭。
 
@@ -35,6 +37,14 @@
 
 - [版本更新与验证记录](docs/movinkpad/release-2026-11-02.md) · [早期开发记录](docs/movinkpad/development-history.md)
 - [源码构建与测试](docs/movinkpad/server-build.md)（JDK 21） · [MovinkPad 适配与验证范围](MOVINKPAD.md)
+- [渲染诊断与 Surface 捕获回迁](docs/movinkpad/render-diagnostics-backport-2026-11-07.md)（保留主线 View／湿墨层替换；仅增加诊断能力，不代表黑屏已解决；后续验证见第二批记录）
+- [稳定工具栏与窗格布局回迁](docs/movinkpad/stable-pane-layout-backport-2026-11-07.md)（减少工具栏变化导致的不必要重挂；主线真实重挂保护保留，验证进度见记录）
+- [光晕缓存重建失效回迁](docs/movinkpad/halo-cache-backport-2026-11-07.md)（context／缓冲重建后撤销旧缓存；验证进度与 GPU 验收边界见记录）
+- [图片绘制与录音关联快照回迁](docs/movinkpad/render-snapshot-backport-2026-11-07.md)（GL 使用入队快照，保留主线 View／湿墨层替换；验证范围见记录）
+- [完整场景批次发布回迁](docs/movinkpad/scene-batch-backport-2026-11-07.md)（失败批次不发布部分更新，SVG 在提交后调度；编译／JVM 已验证，窗口与目标 GPU 待验）
+- [图片解码结果与来源管理回迁](docs/movinkpad/image-decode-backport-2026-11-07.md)（失败请求结清、旧结果撤权，同文档重挂保留有效解码；编译／JVM 已验证，GPU 与窗口待验）
+- [无限画布退出分屏黑屏：排查与只读取证](docs/movinkpad/infinite-split-audit-2026-11-06.md)（根因未确认，尚无真机验证的修复）
+- [MovinkPad 正式版左右分屏黑区候选修复](docs/movinkpad/canvas-split-black-2026-11-07.md)（黑区从画布旧宽度边界开始；已实现跨宿主替换绘制表面，效果待真机验证）
 
 本项目源自 [XNotes Android](https://github.com/shardulvs/xnotes-android)，沿用 [MIT 许可证](LICENSE)。
 

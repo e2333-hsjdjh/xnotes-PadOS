@@ -238,6 +238,8 @@ internal fun NewNoteScreen(
         var face by remember { mutableStateOf(if (coverOnly) Face.COVER else Face.PAGES) }
         // The Generate using AI tab takes the gallery's place; the note keeps showing the face it styles.
         var aiOpen by remember { mutableStateOf(false) }
+        // A template being made keeps going while the gallery tabs are looked at; closing this screen stops it.
+        val templateGen = rememberTemplateGen(coverOnly)
         var tag by remember { mutableStateOf<String?>(null) }
 
         // A template the library gains while this is open was imported from here: select it.
@@ -668,7 +670,8 @@ internal fun NewNoteScreen(
                 // The cover picker of an open note styles its cover alone, so it has no Pages tab.
                 if (!coverOnly) Tab(stringResource(R.string.pages), !aiOpen && face == Face.PAGES) { face = Face.PAGES; aiOpen = false }
                 Tab(stringResource(R.string.cover), !aiOpen && face == Face.COVER) { face = Face.COVER; aiOpen = false }
-                Tab(stringResource(R.string.tab_generate_ai), aiOpen) { aiOpen = true }
+                // A template still being made shows on its tab while another one is looked at.
+                Tab(stringResource(R.string.tab_generate_ai) + if (templateGen.running && !aiOpen) " …" else "", aiOpen) { aiOpen = true }
             }
         }
 
@@ -983,7 +986,7 @@ internal fun NewNoteScreen(
                                 HorizontalDivider(color = border)
                                 if (aiOpen) {
                                     AiTemplateTab(
-                                        coverOnly, wide = true, onImport = onImportTemplate,
+                                        coverOnly, wide = true, onImport = onImportTemplate, onGenerated = editor::importGeneratedTemplate, gen = templateGen,
                                         modifier = Modifier.fillMaxSize().verticalScroll(aiScroll).padding(start = Space.s24, end = Space.s24, top = Space.s20, bottom = Space.s40),
                                     )
                                 } else {
@@ -1034,7 +1037,7 @@ internal fun NewNoteScreen(
                                 item(span = { GridItemSpan(maxLineSpan) }) { Tabs() }
                                 if (aiOpen) {
                                     item(span = { GridItemSpan(maxLineSpan) }) {
-                                        AiTemplateTab(coverOnly, wide = false, onImport = onImportTemplate, modifier = Modifier.padding(top = Space.s12))
+                                        AiTemplateTab(coverOnly, wide = false, onImport = onImportTemplate, onGenerated = editor::importGeneratedTemplate, gen = templateGen, modifier = Modifier.padding(top = Space.s12))
                                     }
                                 } else gallery()
                             }

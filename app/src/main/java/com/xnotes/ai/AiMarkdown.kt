@@ -9,9 +9,13 @@ internal object AiMarkdown {
         data class Prose(val paragraph: Paragraph, val marker: String) : Block
         data class Code(val text: String, val language: String) : Block
         data class Table(val rows: List<List<List<Paragraph>>>) : Block
+        /** A display equation on its own; [pending] while its closing `$$` or `\]` has not arrived. */
+        data class Math(val paragraph: Paragraph, val pending: Boolean) : Block {
+            val latex: String get() = paragraph.runs.single().text
+        }
     }
     fun parse(source: String): List<Block> {
-        val paragraphs = MarkdownParser.parse(source)
+        val paragraphs = MarkdownParser.parse(AiMath.normalize(source))
         val blocks = mutableListOf<Block>()
         val numbers = mutableMapOf<Int, Int>()
         var index = 0
@@ -34,6 +38,10 @@ internal object AiMarkdown {
                         lines += paragraphs[index++].plainText()
                     }
                     blocks += Block.Code(lines.joinToString("\n"), p.codeLang.orEmpty())
+                }
+                p.runs.size == 1 && p.runs[0].style.mathDisplay -> {
+                    index++
+                    blocks += Block.Math(p, pending = index == paragraphs.size && AiMath.endsInsideDisplay(source))
                 }
                 else -> {
                     numbers.keys.removeAll { it > p.indent }

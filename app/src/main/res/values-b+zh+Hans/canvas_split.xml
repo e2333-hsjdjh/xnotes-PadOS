@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="split_canvas_unsupported">画布只能单独打开，不能用于分屏。</string>
+    <string name="split_canvas_saved_unsupported">此分屏包含画布，分屏已不再支持画布。请分别单独打开其中的文档，文档本身未改变。</string>
+</resources>

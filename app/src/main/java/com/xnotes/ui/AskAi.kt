@@ -81,7 +81,7 @@ private fun AiSpinner(color: Color = LocalPalette.current.textDim.toComposeColor
 
 /** A full-width notice on a grey fill: storage failures, source errors, the deleted-chat undo. */
 @Composable
-private fun AiBanner(text: String, action: String? = null, onAction: () -> Unit = {}) {
+internal fun AiBanner(text: String, action: String? = null, onAction: () -> Unit = {}) {
     val palette = LocalPalette.current
     val shape = MaterialTheme.shapes.medium
     Row(
@@ -191,47 +191,69 @@ private fun AiSegmented(options: List<Pair<String, String>>, selected: String, m
 
 /** A setting that is on or off: label and note on the left, the switch on the right; the whole row toggles. */
 @Composable
-private fun AiSwitchRow(title: String, detail: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun AiSwitchRow(title: String, detail: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = MinTouchTarget).clip(MaterialTheme.shapes.small)
-        .toggleable(checked, role = Role.Switch, onValueChange = onChange).padding(horizontal = Space.s4),
+        .toggleable(checked, enabled = enabled, role = Role.Switch, onValueChange = onChange).padding(horizontal = Space.s4),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s12)) {
         SettingsLabel(title, detail, Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = null)
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
 
 @Composable
 private fun effortOptions(): List<Pair<String, String>> = AiThinking.LEVELS.map { it to stringResource(effortRes(it)) }
 
-/** The provider's model list, searchable; ticking adds a model to the saved list. */
+/**
+ * The provider's model list, searchable and sorted by what each model is for ([AiModelKinds]): ticking
+ * a chat model adds it to the chat list, an image model to the image list. Models that may not chat
+ * (speech, embeddings, moderation) sit folded at the end and tick into the chat list if wanted.
+ */
 @Composable
-private fun AiModelPicker(available: List<String>, chosen: List<String>, onToggle: (String) -> Boolean, close: () -> Unit) {
+private fun AiModelPicker(available: List<String>, chat: List<String>, images: List<String>, onToggle: (String, Boolean) -> Boolean, close: () -> Unit) {
     val palette = LocalPalette.current
     var query by remember { mutableStateOf("") }
     var full by remember { mutableStateOf(false) }
+    var others by remember { mutableStateOf(false) }
     val shown = available.filter { it.contains(query.trim(), ignoreCase = true) }
+    val byKind = shown.groupBy(AiModelKinds::kind)
     AlertDialog(onDismissRequest = close, title = { Text(stringResource(R.string.ai_models_fetched_title), fontSize = TextSize.heading) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(Space.s8)) {
             OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true,
                 leadingIcon = { Icon(XnotesIcons.search, null, Modifier.size(18.dp)) }, placeholder = { Text(stringResource(R.string.ai_models_filter)) })
             Text(pluralStringResource(R.plurals.ai_models_count, shown.size, shown.size) + " · " +
-                stringResource(R.string.ai_models_saved_count, chosen.size, AiProtocol.MAX_MODELS), color = palette.textDim.toComposeColor(), fontSize = TextSize.label)
+                stringResource(R.string.ai_models_saved_count, chat.size, AiProtocol.MAX_MODELS) + " · " + stringResource(R.string.ai_provider_image_count, images.size),
+                color = palette.textDim.toComposeColor(), fontSize = TextSize.label)
             // Ticking past the limit is refused here, not trimmed on save.
             if (full) Text(AiText.t(AiMsg.CONFIG_TOO_MANY_MODELS, AiProtocol.MAX_MODELS), color = palette.text.toComposeColor(), fontSize = TextSize.label)
             androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 360.dp)) {
-                items(shown.size, key = { shown[it] }) { index ->
-                    val id = shown[index]
-                    val on = id in chosen
-                    Row(Modifier.fillMaxWidth().heightIn(min = MinTouchTarget).toggleable(on, role = Role.Checkbox) { full = !onToggle(id) }.padding(horizontal = Space.s4),
-                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s12)) {
-                        Box(Modifier.size(20.dp).clip(MaterialTheme.shapes.extraSmall)
-                            .then(if (on) Modifier.background(palette.selectionBackground.toComposeColor()) else Modifier.border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.extraSmall)),
-                            contentAlignment = Alignment.Center) {
-                            if (on) Icon(XnotesIcons.check, null, Modifier.size(14.dp), tint = palette.selectionForeground.toComposeColor())
+                fun section(kind: AiModelKinds.Kind, title: Int, image: Boolean, folded: Boolean = false) {
+                    val list = byKind[kind].orEmpty()
+                    if (list.isEmpty()) return
+                    item(key = "h$kind") {
+                        Row(Modifier.fillMaxWidth().heightIn(min = MinTouchTarget).then(if (kind == AiModelKinds.Kind.OTHER) Modifier.clickable { others = !others } else Modifier)
+                            .padding(horizontal = Space.s4), verticalAlignment = Alignment.CenterVertically) {
+                            Text(stringResource(title) + " · ${list.size}", Modifier.weight(1f), color = palette.textDim.toComposeColor(), fontSize = TextSize.label)
+                            if (kind == AiModelKinds.Kind.OTHER) Icon(if (others) XnotesIcons.chevronUp else XnotesIcons.chevronDown, null, Modifier.size(16.dp), tint = palette.textDim.toComposeColor())
                         }
-                        Text(id, Modifier.weight(1f), color = palette.text.toComposeColor(), fontSize = TextSize.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (folded) return
+                    items(list.size, key = { "$kind/${list[it]}" }) { index ->
+                        val id = list[index]
+                        val on = id in (if (image) images else chat)
+                        Row(Modifier.fillMaxWidth().heightIn(min = MinTouchTarget).toggleable(on, role = Role.Checkbox) { full = !onToggle(id, image) }.padding(horizontal = Space.s4),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s12)) {
+                            Box(Modifier.size(20.dp).clip(MaterialTheme.shapes.extraSmall)
+                                .then(if (on) Modifier.background(palette.selectionBackground.toComposeColor()) else Modifier.border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.extraSmall)),
+                                contentAlignment = Alignment.Center) {
+                                if (on) Icon(XnotesIcons.check, null, Modifier.size(14.dp), tint = palette.selectionForeground.toComposeColor())
+                            }
+                            Text(id, Modifier.weight(1f), color = palette.text.toComposeColor(), fontSize = TextSize.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
+                section(AiModelKinds.Kind.CHAT, R.string.ai_settings_models, image = false)
+                section(AiModelKinds.Kind.IMAGE, R.string.ai_models_image, image = true)
+                section(AiModelKinds.Kind.OTHER, R.string.ai_models_other, image = false, folded = !others)
             }
         }
     }, confirmButton = { TextButton(onClick = close) { Text(stringResource(R.string.ai_ok)) } })
@@ -255,7 +277,7 @@ private val PROVIDER_PRESETS = listOf(
  * anywhere except an explicit model-list fetch, and nothing is stored until Save.
  */
 @Composable
-private fun AiSettings(close: () -> Unit) {
+internal fun AiSettings(close: () -> Unit) {
     val context = LocalContext.current
     val palette = LocalPalette.current
     val store = remember { AiConfigStore(context) }
@@ -266,6 +288,7 @@ private fun AiSettings(close: () -> Unit) {
     // The provider on the editor sheet, and whether it is new (not yet in the list).
     var editing by remember { mutableStateOf<Pair<AiProvider, Boolean>?>(null) }
     var defaultModelMenu by remember { mutableStateOf(false) }
+    var imageProviderMenu by remember { mutableStateOf(false) }
     var promptMenu by remember { mutableStateOf(false) }
     val localDefaultPrompt = AiDefaults.instructions(context.resources.configuration.locales[0].toLanguageTag())
     val many = config.providers.size > 1
@@ -327,7 +350,7 @@ private fun AiSettings(close: () -> Unit) {
                             Icon(XnotesIcons.chevronDown, null, Modifier.padding(start = Space.s4).size(16.dp), tint = palette.textDim.toComposeColor())
                         }
                         DropdownMenu(expanded = defaultModelMenu, onDismissRequest = { defaultModelMenu = false }, modifier = Modifier.heightIn(max = 420.dp)) {
-                            config.providers.forEach { p ->
+                            config.providers.filter { it.modelChoices.isNotEmpty() }.forEach { p ->
                                 Text(p.label, Modifier.padding(horizontal = Space.s16, vertical = Space.s4), color = palette.textDim.toComposeColor(), fontSize = TextSize.label,
                                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 p.modelChoices.forEach { name ->
@@ -371,6 +394,34 @@ private fun AiSettings(close: () -> Unit) {
                         }
                     }
                 }
+                SettingsGroup(stringResource(R.string.ai_settings_image), stringResource(R.string.ai_settings_image_note)) {
+                    // Chosen from the image models the providers list, as the default chat model is from their chat models.
+                    val painters = config.providers.filter { it.imageChoices.isNotEmpty() }
+                    Box {
+                        val imageLabel = if (config.imageRoute() == null) stringResource(R.string.ai_image_none)
+                            else listOfNotNull(config.providerOf(config.imageProvider)?.label?.takeIf { many }, config.imageModel).joinToString(" · ")
+                        Row(Modifier.fillMaxWidth().heightIn(min = MinTouchTarget).clip(MaterialTheme.shapes.small)
+                            .clickable(enabled = painters.isNotEmpty()) { imageProviderMenu = true }.padding(horizontal = Space.s4),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            SettingsLabel(stringResource(R.string.ai_settings_image), modifier = Modifier.weight(1f))
+                            Text(imageLabel, Modifier.widthIn(max = 300.dp), color = palette.text.toComposeColor(), fontSize = TextSize.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Icon(XnotesIcons.chevronDown, null, Modifier.padding(start = Space.s4).size(16.dp), tint = palette.textDim.toComposeColor())
+                        }
+                        DropdownMenu(expanded = imageProviderMenu, onDismissRequest = { imageProviderMenu = false }, modifier = Modifier.heightIn(max = 420.dp)) {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.ai_image_none)) }, onClick = { config = config.copy(imageProvider = "", imageModel = ""); imageProviderMenu = false },
+                                trailingIcon = { if (config.imageRoute() == null) Icon(XnotesIcons.check, null, Modifier.size(16.dp)) })
+                            painters.forEach { p ->
+                                Text(p.label, Modifier.padding(horizontal = Space.s16, vertical = Space.s4), color = palette.textDim.toComposeColor(), fontSize = TextSize.label,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                p.imageChoices.forEach { name ->
+                                    DropdownMenuItem(text = { Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = { config = config.copy(imageProvider = p.id, imageModel = name); imageProviderMenu = false },
+                                        trailingIcon = { if (p.id == config.imageProvider && name == config.imageModel) Icon(XnotesIcons.check, null, Modifier.size(16.dp)) })
+                                }
+                            }
+                        }
+                    }
+                    if (painters.isEmpty()) Text(stringResource(R.string.ai_tpl_gen_image_model_needed), color = palette.textDim.toComposeColor(), fontSize = TextSize.label)
+                }
                 SettingsGroup(stringResource(R.string.ai_settings_search), stringResource(R.string.ai_settings_search_note)) {
                     OutlinedTextField(config.searchKey, { config = config.copy(searchKey = it) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_settings_search_key)) }, singleLine = true, visualTransformation = PasswordVisualTransformation())
                 }
@@ -402,7 +453,9 @@ private fun AiProviderRow(provider: AiProvider, isDefault: Boolean, onClick: () 
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s8)) {
         Column(Modifier.weight(1f)) {
             Text(provider.label, color = palette.text.toComposeColor(), fontSize = TextSize.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(listOf(host, pluralStringResource(R.plurals.ai_provider_models, count, count)).filter(String::isNotEmpty).joinToString(" · "),
+            val images = provider.imageChoices.size
+            Text(listOf(host, pluralStringResource(R.plurals.ai_provider_models, count, count),
+                if (images > 0) stringResource(R.string.ai_provider_image_count, images) else "").filter(String::isNotEmpty).joinToString(" · "),
                 color = palette.textDim.toComposeColor(), fontSize = TextSize.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (isDefault) Text(stringResource(R.string.ai_model_default),
@@ -455,12 +508,29 @@ private fun AiProviderEditor(initial: AiProvider, isNew: Boolean, close: () -> U
         return true
     }
     fun addModel() { newModel.trim().takeIf { it.isNotEmpty() }?.let { if (setChoices(choices() + it)) newModel = "" } }
+    var newImage by remember { mutableStateOf("") }
+    fun images() = provider.imageChoices
+    /** The image list likewise: refused past [AiProtocol.MAX_MODELS], shrinking always allowed. */
+    fun setImages(list: List<String>): Boolean {
+        val clean = list.map(String::trim).filter(String::isNotEmpty).distinct()
+        if (clean.size > AiProtocol.MAX_MODELS && clean.size > images().size) {
+            modelError = AiText.t(AiMsg.CONFIG_TOO_MANY_MODELS, AiProtocol.MAX_MODELS); return false
+        }
+        modelError = ""
+        provider = provider.copy(imageModels = clean)
+        return true
+    }
+    fun addImage() { newImage.trim().takeIf { it.isNotEmpty() }?.let { if (setImages(images() + it)) newImage = "" } }
     fun done() {
-        val clean = provider.copy(name = provider.name.trim(), url = provider.url.trim(), key = provider.key.trim(), models = provider.modelChoices)
+        val clean = provider.copy(name = provider.name.trim(), url = provider.url.trim(), key = provider.key.trim(), models = provider.modelChoices, imageModels = provider.imageChoices)
         runCatching { AiConfigStore.validateProvider(clean) }.onSuccess { onDone(clean) }
             .onFailure { error = it.message ?: context.getString(R.string.ai_settings_invalid) }
     }
-    fetched?.let { list -> AiModelPicker(list, choices(), onToggle = { id -> setChoices(if (id in choices()) choices() - id else choices() + id) }) { fetched = null } }
+    fetched?.let { list ->
+        AiModelPicker(list, choices(), images(), onToggle = { id, image ->
+            if (image) setImages(if (id in images()) images() - id else images() + id) else setChoices(if (id in choices()) choices() - id else choices() + id)
+        }) { fetched = null }
+    }
     androidx.compose.ui.window.Dialog(onDismissRequest = close, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
         val shape = MaterialTheme.shapes.large
         Column(Modifier.widthIn(max = 600.dp).fillMaxWidth(0.9f).fillMaxHeight(0.86f).clip(shape)
@@ -532,6 +602,24 @@ private fun AiProviderEditor(initial: AiProvider, isNew: Boolean, close: () -> U
                     }
                     if (fetchError.isNotEmpty()) Text(fetchError, color = palette.textDim.toComposeColor(), fontSize = TextSize.label)
                     if (modelError.isNotEmpty()) Text(modelError, color = palette.text.toComposeColor(), fontSize = TextSize.label)
+                }
+                // Models that paint pictures, kept apart from the chat list; fetched ones are ticked in the same dialog.
+                SettingsGroup(stringResource(R.string.ai_models_image),
+                    stringResource(R.string.ai_models_image_note) + " " + stringResource(R.string.ai_models_saved_count, images().size, AiProtocol.MAX_MODELS)) {
+                    if (images().isEmpty()) Text(stringResource(R.string.ai_models_image_empty), color = palette.textDim.toComposeColor(), fontSize = TextSize.body)
+                    Column {
+                        images().forEachIndexed { index, name ->
+                            if (index > 0) HorizontalDivider(color = palette.border.toComposeColor())
+                            key("image/$name") { AiModelRow(name) { setImages(images() - name) } }
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s8)) {
+                        OutlinedTextField(newImage, { newImage = it }, Modifier.weight(1f), label = { Text(stringResource(R.string.ai_models_image_add)) }, singleLine = true,
+                            placeholder = { Text(stringResource(R.string.ai_image_model_hint)) },
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { addImage() }))
+                        AiIconButton(XnotesIcons.plus, stringResource(R.string.ai_models_image_add), enabled = newImage.isNotBlank(), onClick = ::addImage)
+                    }
                 }
                 SettingsGroup(stringResource(R.string.ai_settings_thinking)) {
                     Box {
@@ -1000,7 +1088,7 @@ private fun AiModelChip(sessions: AiSessions, chat: AiChat, config: AiConfig, mo
         else listOfNotNull(provider?.label?.takeIf { config.providers.size > 1 }, current.model.ifBlank { stringResource(R.string.ai_settings_no_model) },
             current.effort.takeIf { it.isNotEmpty() }?.let { stringResource(effortRes(it)) }).joinToString(" · ")
     // Each group is a provider and its models; a setup from before providers is one unnamed group.
-    val groups = config.providers.map { it.id to it.label to it.modelChoices }.ifEmpty { listOf("" to "" to config.modelChoices).filter { it.second.isNotEmpty() } }
+    val groups = config.providers.filter { it.modelChoices.isNotEmpty() }.map { it.id to it.label to it.modelChoices }.ifEmpty { listOf("" to "" to config.modelChoices).filter { it.second.isNotEmpty() } }
     val total = groups.sumOf { it.second.size }
     val needle = query.trim()
     Box(modifier) {

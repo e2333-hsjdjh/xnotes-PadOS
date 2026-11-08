@@ -159,3 +159,22 @@ class OnCanvas(
         doc.itemsChanged(touched)
     }
 }
+
+/** Notify recording metadata after undo/redo without re-indexing or rebuilding item geometry. */
+class OnCanvasSync(
+    private val doc: InfiniteDocument,
+    private val inner: Command,
+    touched: List<CanvasItem>,
+) : Command by inner {
+    private val touched = touched.toList()
+
+    override fun redo() {
+        inner.redo()
+        doc.syncChanged(touched)
+    }
+
+    override fun undo() {
+        inner.undo()
+        doc.syncChanged(touched)
+    }
+}

@@ -664,19 +664,19 @@ class SplitEditorTest {
                 val codec = DocumentCodec(com.xnotes.platform.AndroidImageCodec(), com.xnotes.platform.AndroidTextMeasurer())
                 repeat(2) { index ->
                     val uri = android.provider.DocumentsContract.createDocument(context.contentResolver, parent,
-                        "application/octet-stream", "saved-split-test-$index." + if (index == 0) "xnote" else "xcanvas")!!
+                        "application/octet-stream", "saved-split-test-$index.xnote")!!
                     files.add(uri)
-                    context.contentResolver.openOutputStream(uri)!!.use {
-                        if (index == 0) codec.write(a.state.document, it)
-                        else com.xnotes.format.CanvasCodec(com.xnotes.platform.AndroidImageCodec(), com.xnotes.platform.AndroidTextMeasurer())
-                            .write(com.xnotes.core.infinite.InfiniteDocument(), it)
-                    }
+                    // Canvases no longer join splits; savedSplitWithCanvasIsRefusedWithoutDetaching covers them.
+                    // Each file needs its own document identity: two files claiming one id are refused
+                    // as duplicates, which would leave the second pane closed and the split unsaved.
+                    val doc = if (index == 0) a.state.document else com.xnotes.core.model.Document.blank()
+                    context.contentResolver.openOutputStream(uri)!!.use { codec.write(doc, it) }
                 }
                 a.openAsync(files[0].toString())
                 val b = a.secondaryPane()
-                b.openCanvasAsync(files[1].toString(), "saved-canvas.xcanvas")
+                b.openAsync(files[1].toString())
                 a.state.zoom = 1.25; a.state.scrollY = 140.0
-                b.infinite.viewport.apply(com.xnotes.core.infinite.Waypoint("", 230.0, 450.0, 2.0))
+                b.state.zoom = 2.0; b.state.scrollY = 450.0
                 a.splitRatio = 0.38f; a.splitReversed = true; a.splitSideBySide = false
                 val before = a.storedSplitFiles().toSet()
                 assertTrue(a.saveCurrentSplit())
@@ -712,13 +712,14 @@ class SplitEditorTest {
                 assertTrue(restored.inSplit)
                 assertEquals(files[0].toString(), restored.currentUri)
                 assertEquals(files[1].toString(), restored.secondary!!.visibleDocumentUri)
-                assertTrue(restored.secondary!!.canvasOpen)
+                assertFalse(restored.secondary!!.canvasOpen)
                 assertTrue(restored.splitReversed)
                 assertEquals(0.38f, restored.splitRatio, 0.001f)
                 assertEquals(false, restored.splitSideBySide)
                 assertNotNull(restored.state.pendingInitialView)
-                assertEquals(230.0, restored.secondary!!.infinite.document.lastView!!.cx, 0.001)
-                assertEquals(450.0, restored.secondary!!.infinite.document.lastView!!.cy, 0.001)
+                val second = restored.secondary!!.state.pendingInitialView as com.xnotes.canvas.InitialView.Restore
+                assertEquals(2.0, second.zoom, 0.001)
+                assertEquals(450.0, second.scrollY, 0.001)
                 val outside = Editor(ContextThemeWrapper(context, R.style.Theme_Xnotes))
                 val externalNote = java.io.File(context.cacheDir, "discard-split-test.xnote")
                 val originalBytes = context.contentResolver.openInputStream(files[0])!!.use { it.readBytes() }
@@ -742,8 +743,8 @@ class SplitEditorTest {
                 assertTrue("no late close callback closes the selected note", restored.noteOpen)
                 assertTrue(restored.openSplitFile(splitUri))
                 assertTrue("explicit split restore still works", restored.inSplit)
-                assertTrue(restored.openSingleFromHome(files[1].toString(), "canvas.xcanvas"))
-                assertTrue(restored.canvasOpen)
+                assertTrue(restored.openSingleFromHome(files[1].toString(), "second.xnote"))
+                assertEquals(files[1].toString(), restored.visibleDocumentUri)
                 assertFalse(restored.inSplit)
                 restored.goHomeAll()
                 assertTrue(a.deleteSplitFile(splitUri))
@@ -789,6 +790,42 @@ class SplitEditorTest {
                 assertTrue(a.noteOpen); assertSame(original, a.state.document)
                 assertTrue(a.dirty)
             } finally { file.delete(); a.goHomeAll() }
+        }
+    }
+
+    @Test fun savedSplitWithCanvasIsRefusedWithoutDetaching() = kotlinx.coroutines.runBlocking {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            val context = PenTestRunner.instance.targetContext
+            val a = Editor(ContextThemeWrapper(context, R.style.Theme_Xnotes))
+            a.newNote(); a.addPageAtEnd()
+            val original = a.state.document
+            val file = java.io.File(java.io.File(context.filesDir, "splits").apply { mkdirs() }, "canvas-split-test.xsplit")
+            try {
+                file.writeText("""{"format":"xnotes-split","version":2,"primaryPath":"content://missing/first","secondPath":"content://missing/second","secondCanvas":true}""")
+                assertFalse(a.openSplitFile(android.net.Uri.fromFile(file).toString()))
+                assertEquals(context.getString(R.string.split_canvas_saved_unsupported), a.message)
+                assertTrue(a.noteOpen); assertSame(original, a.state.document)
+                assertTrue(a.dirty)
+                assertNull(a.secondary)
+            } finally { file.delete(); a.goHomeAll() }
+        }
+    }
+
+    @Test fun lastSessionSplitWithCanvasRestoresOnlyThePrimaryPane() = kotlinx.coroutines.runBlocking {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            val context = PenTestRunner.instance.targetContext
+            val store = java.io.File(context.filesDir, "split-workspace.json")
+            val old = store.takeIf { it.exists() }?.readBytes()
+            try {
+                for (prefix in listOf("primary", "second")) {
+                    store.writeText("""{"format":"xnotes-split","version":2,"secondOpen":true,"primaryOpen":true,"${prefix}Canvas":true,"primaryPath":"content://missing/first","secondPath":"content://missing/second"}""")
+                    val restored = Editor(ContextThemeWrapper(context, R.style.Theme_Xnotes))
+                    restored.restoreSplitWorkspace()
+                    assertNull("$prefix canvas: no second pane", restored.secondary)
+                    assertFalse(restored.inSplit)
+                    assertNull("$prefix canvas: no missing-file placeholder", restored.missingDocument)
+                }
+            } finally { if (old == null) store.delete() else store.writeBytes(old) }
         }
     }
 

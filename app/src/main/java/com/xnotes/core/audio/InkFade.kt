@@ -1,6 +1,7 @@
 package com.xnotes.core.audio
 
 import com.xnotes.core.model.CanvasItem
+import com.xnotes.core.model.SyncMark
 import com.xnotes.core.pal.Renderer
 
 /**
@@ -9,9 +10,11 @@ import com.xnotes.core.pal.Renderer
  */
 class InkFade(val rid: Int, val playheadMs: Int) {
 
-    fun fades(item: CanvasItem): Boolean {
-        val m = item.sync ?: return false
-        return m.rid == rid && m.ms > playheadMs
+    fun fades(item: CanvasItem): Boolean = fadesSync(item.sync)
+
+    /** Also accepts a mark captured for a renderer that must not read the mutable model. */
+    fun fadesSync(mark: SyncMark?): Boolean {
+        return mark != null && mark.rid == rid && mark.ms > playheadMs
     }
 
     companion object {
