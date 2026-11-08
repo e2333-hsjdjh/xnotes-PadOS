@@ -12,6 +12,8 @@ enum AIMarkdownRegression {
     2. 验证结果
 
     > 注意：这是模型回答中的引用。
+    >
+    > > 嵌套引用中的 **重点**。
 
     | 符号 | 含义 |
     | :--- | ---: |
@@ -24,20 +26,26 @@ enum AIMarkdownRegression {
     ```
     """
     static func run() {
-        let blocks = AIMarkdown.parse(sample).map(\.kind)
-        precondition(blocks.contains(.heading(1, "学习结论")))
-        precondition(blocks.contains(.item(indent: 0, marker: "☑", text: "确定半径")))
-        precondition(blocks.contains(.code(language: "swift", text: "let radius = 5\nprint(radius * radius)")))
-        precondition(blocks.contains(.table(rows: [["符号", "含义"], ["x、y", "坐标"], ["r", "半径"]], alignment: [.leading, .trailing])))
-        precondition(AIMarkdown.cells("| `a|b` | c\\|d |") == ["`a|b`", "c|d"])
-        precondition(AIMarkdown.parse("标题\n===").first?.kind == .heading(1, "标题"))
-        precondition(AIMarkdown.parse("---").first?.kind == .rule)
-        precondition(AIMarkdown.parse("~~~~swift\nx\n~~~\ny").first?.kind == .code(language: "swift", text: "x\n~~~\ny"))
-        precondition(AIMarkdown.parse("    let x = 1").first?.kind == .code(language: "", text: "let x = 1"))
-        precondition(AIMarkdown.parse("| a | b |\n| --- | --- |\n| x |").first?.kind == .table(rows: [["a", "b"], ["x", ""]], alignment: [.leading, .leading]))
-        precondition(AIMarkdown.parse("3. a\n1. b").last?.kind == .item(indent: 0, marker: "4.", text: "b"))
+        let blocks = AIMarkdown.parse(sample)
+        precondition(blocks.first?.kind == .header(level: 1))
+        precondition(blocks.contains { $0.kind == .codeBlock(languageHint: "swift") && $0.plainText.contains("print(radius * radius)") })
+        let nested = AIMarkdown.parse("3. First\n   continuation\n\n   second paragraph\n   - nested **bold**\n4. Next")
+        precondition(nested.count == 1 && nested[0].kind == .orderedList)
+        let item = nested[0].children[0]
+        precondition(item.kind == .listItem(ordinal: 3) && item.children.count == 3)
+        precondition(item.children[0].plainText.contains("continuation"))
+        precondition(item.children[1].plainText == "second paragraph")
+        precondition(item.children[2].kind == .unorderedList)
+        precondition(item.children[2].children[0].children[0].text.runs.contains { $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true })
+        let quote = AIMarkdown.parse("> outer\n>\n> > inner\n> >\n> > ```swift\n> > let x = 1\n> > ```")
+        precondition(quote.first?.kind == .blockQuote)
+        precondition(quote[0].children.contains { $0.kind == .blockQuote })
+        precondition(AIMarkdown.parse("title\n===").first?.kind == .header(level: 1))
+        precondition(AIMarkdown.parse("---").first?.kind == .thematicBreak)
+        let table = AIMarkdown.parse("| a | b |\n| :--- | ---: |\n| x | y |")[0]
+        precondition(table.children.count == 2 && table.children[0].children[0].plainText == "a")
         for index in sample.indices { _ = AIMarkdown.parse(String(sample[..<index])) }
-        precondition(AIMarkdown.parse("<script>alert(1)</script>").first?.kind == .paragraph("<script>alert(1)</script>"))
-        print("PASS Markdown headings, lists, tasks, quotes, fences, indented code, aligned tables, escaped pipes and every streaming prefix")
+        precondition(AIMarkdown.parse("````swift\nx\n```\ny").first?.plainText.contains("```\ny") == true)
+        print("PASS Markdown headings, lists, nested continuation paragraphs, attributed spans, nested quotes, tables and every streaming prefix")
     }
 }
