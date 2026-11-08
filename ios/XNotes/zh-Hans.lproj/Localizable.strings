@@ -382,3 +382,9 @@
 "All conversations" = "全部会话";
 
 "Copy code" = "复制代码";
+
+"Select PDF text" = "选择 PDF 文字";
+"PDF text selection unavailable" = "此 PDF 不允许选择文字";
+"No selectable PDF text" = "此页没有可选择的 PDF 文字";
+"Touch and hold text, then drag the selection handles." = "长按文字后，拖动选择手柄调整范围。";
+"The selected page changed or the markup could not be saved." = "所选页面已变化，或无法保存文字标注。";

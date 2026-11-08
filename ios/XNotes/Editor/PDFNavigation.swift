@@ -55,9 +55,7 @@ enum PDFPageSearch {
     private static let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
 
     static func matchRects(on page: PDFPage, query: String, displaySize: CGSize) -> [CGRect] {
-        guard !query.isEmpty, let text = page.string, let reference = page.pageRef else { return [] }
-        let display = CGRect(origin: .zero, size: displaySize)
-        let transform = reference.getDrawingTransform(.cropBox, rect: display, rotate: 0, preserveAspectRatio: true)
+        guard !query.isEmpty, let text = page.string else { return [] }
         var cursor = text.startIndex
         var rectangles: [CGRect] = []
         for _ in 0..<100 {
@@ -66,13 +64,7 @@ enum PDFPageSearch {
                                          locale: .current), !range.isEmpty else { break }
             cursor = range.upperBound
             guard let selection = page.selection(for: NSRange(range, in: text)) else { continue }
-            for line in selection.selectionsByLine() {
-                let bottomUp = line.bounds(for: page).applying(transform)
-                let topDown = CGRect(x: bottomUp.minX, y: display.height - bottomUp.maxY,
-                                     width: bottomUp.width, height: bottomUp.height)
-                let clipped = topDown.intersection(display)
-                if !clipped.isEmpty && !clipped.isInfinite { rectangles.append(clipped) }
-            }
+            rectangles += PDFSelectionGeometry.rectangles(selection, on: page, displaySize: displaySize)
         }
         return rectangles
     }

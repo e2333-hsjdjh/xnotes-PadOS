@@ -15,6 +15,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     @ViewBuilder let splitChoices: () -> SplitChoices
 
     @Environment(\.colorScheme) private var scheme
+    @State private var pdfTextSelection: PDFTextSelectionRequest?
     @State private var pdfMatchQuery = ""
     @State private var pdfMatchPage: UUID?
     @State private var pdfMatchRects: [CGRect] = []
@@ -223,6 +224,15 @@ struct NotebookEditor<SplitChoices: View>: View {
                 insertPDF(request, indices: indices)
             }
         }
+        .sheet(item: $pdfTextSelection) { request in
+            PDFTextSelectionSheet(request: request) { mark in
+                guard mark.isValid, let current = latestNotebook,
+                      current.pdfDigest == request.digest,
+                      let target = current.pages.first(where: { $0.id == request.pageID }),
+                      target.pdfBackground == request.background else { return false }
+                return updatePage(on: request.pageID) { $0.pdfTextMarkups = ($0.pdfTextMarkups ?? []) + [mark] }
+            }
+        }
         .sheet(item: $cropRequest) { request in
             PageImageCropView(image: request.image) { region in
                 do {
@@ -403,6 +413,11 @@ struct NotebookEditor<SplitChoices: View>: View {
                 }
                 if currentPDFPage != nil {
                     Menu("PDF text markup", systemImage: "character.textbox") {
+                        Button("Select PDF text") {
+                            if let original = currentPDFPage {
+                                pdfTextSelection = PDFTextSelectionRequest(pageID: page.id, background: page.pdfBackground, digest: notebook.pdfDigest, original: original)
+                            }
+                        }
                         ForEach(PDFTextMarkup.Kind.allCases, id: \.self) { kind in
                             Button(kind.label) { addPDFMarkup(kind) }
                                 .disabled(pdfMatchPage != page.id || pdfMatchRects.isEmpty)

@@ -1,4 +1,5 @@
 import Foundation
+import PDFKit
 import Security
 import UIKit
 import SwiftUI
@@ -169,6 +170,7 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
             do {
                 try await AISettingsRegression.run()
                 AIMarkdownRegression.run()
+                try PDFSelectionRegression.run()
                 try await AIChatRegression.run()
                 try await AIImageRegression.run()
                 if let window { try await snapshots(window: window) }
@@ -256,5 +258,26 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
         window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
     try previewImage.pngData()!.write(to: output.appending(path: "ai-screenshot-preview.png"))
+
+    let selectionDocument = PDFDocument(data: PDFSelectionRegression.fixture())!
+    let selectionPage = selectionDocument.page(at: 0)!
+    let selectionRequest = PDFTextSelectionRequest(pageID: UUID(), background: nil, digest: nil, original: selectionPage)
+    let selector = UIHostingController(rootView: PDFTextSelectionSheet(request: selectionRequest, save: { _ in true }))
+    window.rootViewController = selector
+    window.makeKeyAndVisible()
+    try await Task.sleep(for: .milliseconds(500))
+    func pdfView(in view: UIView) -> PDFView? {
+        if let pdf = view as? PDFView { return pdf }
+        return view.subviews.compactMap { pdfView(in: $0) }.first
+    }
+    guard let native = pdfView(in: selector.view), let selectionCopy = native.document?.page(at: 0) else { fatalError("Native PDF selection view missing") }
+    precondition(selectionCopy !== selectionPage)
+    native.setCurrentSelection(selectionCopy.selection(for: NSRange(location: 0, length: 17)), animate: false)
+    try await Task.sleep(for: .milliseconds(300))
+    selector.view.layoutIfNeeded()
+    let selectedImage = UIGraphicsImageRenderer(bounds: window.bounds, format: imageFormat).image { _ in
+        window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+    }
+    try selectedImage.pngData()!.write(to: output.appending(path: "pdf-free-selection.png"))
 
 }
