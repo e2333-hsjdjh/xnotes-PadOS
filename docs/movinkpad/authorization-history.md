@@ -71,3 +71,7 @@
 ## 2026-11-08：iOS 云端目标改为 xnotes-PadOS/main
 
 用户明确提供 `https://github.com/e2333-hsjdjh/xnotes-PadOS.git`，要求推送到 `main`。此前 Hshevin/xnotes-android 的权限阻碍不再作为此任务上传目标。目标仓库确认当前账号具有 push 权限；检查时仅有 master、没有 main，本轮允许创建 main 并推送当前 iOS 功能提交及依赖的既有迁移历史。保留远端 master，不改默认分支，不改本地 origin，不强制推送。后续同一移植任务每个功能独立提交并上传到这个 main，取代此前 codex/ios-port 远端命名约定。
+
+## 2026-11-08：iOS 上传分支更正为 master
+
+用户明确更正「上传到 master，说错了」。当前 iOS 云端目标统一改为 e2333-hsjdjh/xnotes-PadOS 的 master，每功能单独提交并上传；此前新建的 main 保留，不删除、不强推。用户随后要求一并对照刚同步的 Android 新功能。远端 master 与当前 iOS 开发历史没有共同祖先；先保留远端 Android 内容并整合两段历史，再正常推送，不覆盖远端更新，不更改本地 origin 或仓库默认分支。

@@ -16,6 +16,7 @@ enum NotebookPDFExport {
         let bounds: CGRect
         var crop: CGRect? = nil
         var dark = false
+        var scope = 0
     }
 
     static func data(for notebook: Notebook, source: PDFDocument?, pagePDFs: [String: PDFDocument] = [:], selecting ids: Set<UUID>? = nil) throws -> Data {
@@ -24,15 +25,23 @@ enum NotebookPDFExport {
 
     static func data(for inputs: [Input]) throws -> Data {
         guard !inputs.isEmpty else { throw CocoaError(.fileReadNoSuchFile) }
-        let pages = try inputs.flatMap(exportPages)
+        let pages = try inputs.enumerated().flatMap { scope, input in
+            try exportPages(input).map { page in
+                var grouped = page
+                grouped.scope = scope
+                return grouped
+            }
+        }
+        let links = PDFExportLinks.plans(for: pages.map { PDFExportLinks.Page(original: $0.original, bounds: $0.bounds, scope: $0.scope) })
         var renderError: Error?
         let renderer = UIGraphicsPDFRenderer(bounds: .zero)
         let data = renderer.pdfData { context in
             do {
-                for page in pages {
+                for (index, page) in pages.enumerated() {
                     context.beginPage(withBounds: CGRect(origin: .zero, size: page.crop?.size ?? page.bounds.size), pageInfo: [:])
                     try NotebookPageDrawing.draw(page.note, original: page.original, in: page.bounds,
                                                  with: context.cgContext, inkScale: 2, crop: page.crop, dark: page.dark)
+                    links[index].draw(in: context.cgContext)
                 }
             } catch {
                 renderError = error

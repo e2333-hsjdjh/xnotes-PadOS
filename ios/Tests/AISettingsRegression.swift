@@ -171,6 +171,7 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
                 try await AISettingsRegression.run()
                 AIMarkdownRegression.run()
                 try PDFSelectionRegression.run()
+                try PDFExportLinkRegression.run()
                 try await AIChatRegression.run()
                 try await AIImageRegression.run()
                 if let window { try await snapshots(window: window) }
