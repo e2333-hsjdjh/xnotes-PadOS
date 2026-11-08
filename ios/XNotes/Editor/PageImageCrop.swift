@@ -27,9 +27,23 @@ enum PageImageCrop {
     }
 }
 
-struct PageImageCropView: View {
+struct PageImageCropView<Footer: View>: View {
     let image: PageImage
+    var title: LocalizedStringKey = "Crop image"
+    var confirmation: LocalizedStringKey = "Apply"
+    var allowFullImage = false
+    let footer: Footer
     let apply: (CGRect) -> Bool
+
+    init(image: PageImage, title: LocalizedStringKey = "Crop image", confirmation: LocalizedStringKey = "Apply",
+         allowFullImage: Bool = false, @ViewBuilder footer: () -> Footer, apply: @escaping (CGRect) -> Bool) {
+        self.image = image
+        self.title = title
+        self.confirmation = confirmation
+        self.allowFullImage = allowFullImage
+        self.footer = footer()
+        self.apply = apply
+    }
 
     @Environment(\.dismiss) private var dismiss
     @State private var topLeft = CGPoint.zero
@@ -42,36 +56,40 @@ struct PageImageCropView: View {
 
     var body: some View {
         NavigationStack {
-            GeometryReader { geometry in
-                if let bitmap = UIImage(data: image.data), geometry.size.width > 48, geometry.size.height > 48 {
-                    let scale = min((geometry.size.width - 48) / bitmap.size.width,
-                                    (geometry.size.height - 48) / bitmap.size.height)
-                    let size = CGSize(width: bitmap.size.width * scale, height: bitmap.size.height * scale)
-                    ZStack {
-                        Image(uiImage: bitmap).resizable()
-                        Canvas { context, _ in
-                            let box = CGRect(x: region.minX * size.width, y: region.minY * size.height,
-                                             width: region.width * size.width, height: region.height * size.height)
-                            var mask = Path(CGRect(origin: .zero, size: size))
-                            mask.addRect(box)
-                            context.fill(mask, with: .color(.black.opacity(0.55)), style: FillStyle(eoFill: true))
-                            context.stroke(Path(box), with: .color(.white), lineWidth: 2)
+            VStack(spacing: UITokens.noSpacing) {
+                GeometryReader { geometry in
+                    if let bitmap = UIImage(data: image.data), geometry.size.width > UITokens.minTouchTarget, geometry.size.height > UITokens.minTouchTarget {
+                        let scale = min((geometry.size.width - UITokens.minTouchTarget) / bitmap.size.width,
+                                        (geometry.size.height - UITokens.minTouchTarget) / bitmap.size.height)
+                        let size = CGSize(width: bitmap.size.width * scale, height: bitmap.size.height * scale)
+                        ZStack {
+                            Image(uiImage: bitmap).resizable()
+                            Canvas { context, _ in
+                                let box = CGRect(x: region.minX * size.width, y: region.minY * size.height,
+                                                 width: region.width * size.width, height: region.height * size.height)
+                                var mask = Path(CGRect(origin: .zero, size: size))
+                                mask.addRect(box)
+                                context.fill(mask, with: .color(.black.opacity(0.55)), style: FillStyle(eoFill: true))
+                                context.stroke(Path(box), with: .color(.black), lineWidth: UITokens.overlayOutline)
+                                context.stroke(Path(box), with: .color(.white), lineWidth: UITokens.hairline)
+                            }
+                            .allowsHitTesting(false)
+                            handle(topLeft, size: size, leading: true)
+                            handle(bottomRight, size: size, leading: false)
                         }
-                        .allowsHitTesting(false)
-                        handle(topLeft, size: size, leading: true)
-                        handle(bottomRight, size: size, leading: false)
+                        .frame(width: size.width, height: size.height)
+                        .coordinateSpace(name: space)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-                    .frame(width: size.width, height: size.height)
-                    .coordinateSpace(name: space)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                footer
             }
-            .navigationTitle("Crop image")
+            .navigationTitle(Text(title))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Apply") { if apply(region) { dismiss() } }
-                        .disabled(region == CGRect(x: 0, y: 0, width: 1, height: 1))
+                    Button { if apply(region) { dismiss() } } label: { Text(confirmation) }
+                        .disabled(!allowFullImage && region == CGRect(x: 0, y: 0, width: 1, height: 1))
                 }
             }
         }
@@ -79,8 +97,8 @@ struct PageImageCropView: View {
 
     private func handle(_ point: CGPoint, size: CGSize, leading: Bool) -> some View {
         Circle().fill(.white).overlay { Circle().strokeBorder(.black, lineWidth: 2) }
-            .frame(width: 18, height: 18)
-            .frame(width: 48, height: 48)
+            .frame(width: UITokens.cropHandle, height: UITokens.cropHandle)
+            .frame(width: UITokens.minTouchTarget, height: UITokens.minTouchTarget)
             .contentShape(Rectangle())
             .position(x: point.x * size.width, y: point.y * size.height)
             .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named(space)).onChanged { drag in
@@ -94,5 +112,12 @@ struct PageImageCropView: View {
                                           y: max(min(1, y), topLeft.y + 0.05))
                 }
             })
+    }
+}
+
+extension PageImageCropView where Footer == EmptyView {
+    init(image: PageImage, title: LocalizedStringKey = "Crop image", confirmation: LocalizedStringKey = "Apply",
+         allowFullImage: Bool = false, apply: @escaping (CGRect) -> Bool) {
+        self.init(image: image, title: title, confirmation: confirmation, allowFullImage: allowFullImage, footer: { EmptyView() }, apply: apply)
     }
 }

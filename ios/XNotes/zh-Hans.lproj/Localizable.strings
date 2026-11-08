@@ -359,3 +359,22 @@
 "Conversation storage is unavailable. No request was sent." = "会话存储不可用，未发送请求。";
 "The AI request failed. Check the provider and connection." = "AI 请求失败，请检查供应商和网络连接。";
 "AI request failed (HTTP %d)." = "AI 请求失败（HTTP %d）。";
+
+"Preview attached image" = "预览附件图片";
+"Attached image" = "附件图片";
+"Importing image…" = "正在导入图片…";
+"Attach image" = "添加图片附件";
+"Screenshot for AI" = "截图用于 AI";
+"Add to AI" = "添加到 AI";
+"Add to conversation" = "添加到会话";
+"The screenshot stays local until you send the conversation." = "截图仅保存在本地，发送会话后才会上传。";
+"Image attachment error" = "图片附件错误";
+"Cancel image imports" = "取消图片导入";
+"Discard failed image import" = "放弃失败的图片导入";
+"The selected image could not be read. No attachment was added." = "无法读取所选图片，未添加附件。";
+"The image is too large. Use a source up to 32 MiB and a prepared PNG up to 8 MiB." = "图片过大：原文件不得超过 32 MiB，处理后的 PNG 不得超过 8 MiB。";
+"A question can include at most six images. No images were discarded." = "每个问题最多添加六张图片，未丢弃任何图片。";
+"Wait for image imports to finish before sending." = "请等待图片导入完成后再发送。";
+"Resolve or discard the failed image import before sending." = "请重新导入图片或放弃失败的导入，再发送问题。";
+
+"The conversation exceeds the 64 MiB storage limit. Existing files were kept." = "会话超过 64 MiB 存储上限，已保留已有文件。";

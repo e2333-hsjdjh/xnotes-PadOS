@@ -10,6 +10,10 @@ struct LibraryView: View {
     let aiSettings: AIConfigurationStore
     let aiSessions: AISessions
     @State private var showingAI = false
+    @State private var openingAIConversationID: UUID?
+    @State private var activeAIConversationID: UUID?
+    @State private var screenshotForAI: AIScreenshotRequest?
+    @State private var pendingAIConversationID: UUID?
     @State private var showingAISettings = false
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("librarySort") private var sort = LibrarySort.modified
@@ -158,7 +162,19 @@ struct LibraryView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingAI) { AIChatView(sessions: aiSessions, settings: aiSettings) }
+        .sheet(isPresented: $showingAI, onDismiss: { aiSessions.releaseEmpty(activeAIConversationID) }) {
+            AIChatView(sessions: aiSessions, settings: aiSettings, initialConversationID: openingAIConversationID,
+                       selectionChanged: { activeAIConversationID = $0 })
+        }
+        .sheet(item: $screenshotForAI, onDismiss: {
+            if let id = pendingAIConversationID {
+                pendingAIConversationID = nil
+                openingAIConversationID = id
+                showingAI = true
+            }
+        }) { request in
+            AIScreenshotPreview(request: request, sessions: aiSessions) { pendingAIConversationID = $0 }
+        }
         .sheet(isPresented: $showingAISettings) { AISettingsView(store: aiSettings) }
         .onAppear { maintainStorage() }
         .onChange(of: scenePhase) { if scenePhase == .active { maintainStorage() } }
@@ -255,7 +271,7 @@ struct LibraryView: View {
                                 }
                             }
                         }
-                        Button("AI", systemImage: "sparkles") { showingAI = true }
+                        Button("AI", systemImage: "sparkles") { openingAIConversationID = nil; showingAI = true }
                         Button("AI settings", systemImage: "sparkles") { showingAISettings = true }
                         Picker("Appearance", selection: $appearance) {
                             Text("System").tag("system")
@@ -465,7 +481,14 @@ struct LibraryView: View {
 
     private func editor(_ notebook: Notebook, in pane: DocumentPane) -> some View {
         let shared = panes.first(where: { $0.documentID == notebook.id })?.id != pane.id
-        return NotebookEditor(notebook: notebook, library: library, readOnly: shared, close: {
+        return NotebookEditor(notebook: notebook, library: library, readOnly: shared, captureAI: { page, original, canvas, dark in
+            do {
+                let image = try NotebookPageDrawing.render(page, original: original, longestEdge: CGFloat(AIImagePreparation.longestEdge), canvas: canvas, dark: dark)
+                guard let png = image.pngData() else { throw AIImageError.invalid }
+                screenshotForAI = AIScreenshotRequest(image: PageImage(data: png, frame: CGRect(origin: .zero, size: image.size)),
+                                                     documentID: notebook.id, snapshot: page, original: original, canvas: canvas, dark: dark)
+            } catch { library.issue = error.localizedDescription }
+        }, close: {
             panes = DocumentPane.closingDocument(in: pane.id, panes: panes)
         }, openRecoveredCopy: { documentID in
             replace(pane, with: documentID)

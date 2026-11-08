@@ -19,7 +19,7 @@ struct AIHistoryStore {
                 }
                 let conversation = try JSONDecoder().decode(AIConversation.self, from: Data(contentsOf: file))
                 guard file.lastPathComponent == conversation.id.uuidString + ".json" else { throw AIChatError.corruptHistory }
-                try conversation.validate()
+                try conversation.validate(decodingImages: true)
                 conversations.append(conversation)
             } catch { damaged += 1 }
         }
@@ -29,7 +29,7 @@ struct AIHistoryStore {
     func save(_ conversation: AIConversation) throws {
         try conversation.validate()
         let data = try JSONEncoder().encode(conversation)
-        guard data.count <= Self.byteLimit else { throw AIChatError.responseLimit }
+        guard data.count <= Self.byteLimit else { throw AIChatError.historyLimit }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         var excluded = directory
         var values = URLResourceValues()

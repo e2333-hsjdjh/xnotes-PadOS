@@ -8,6 +8,7 @@ struct NotebookEditor<SplitChoices: View>: View {
     let notebook: Notebook
     let library: LibraryStore
     let readOnly: Bool
+    let captureAI: (NotePage, PDFPage?, Bool, Bool) -> Void
     let close: () -> Void
     let openRecoveredCopy: (UUID) -> Void
     @ViewBuilder let splitChoices: () -> SplitChoices
@@ -344,6 +345,16 @@ struct NotebookEditor<SplitChoices: View>: View {
                     .frame(minWidth: 48, minHeight: 48)
             }
             .accessibilityLabel(Text("Zoom"))
+            Button("Screenshot for AI", systemImage: "sparkles") {
+                guard let current = latestNotebook,
+                      let index = current.pages.firstIndex(where: { $0.id == page.id }) else { return }
+                let snapshot = current.pages[index]
+                let original = pdfSources.page(for: snapshot, at: index)
+                guard (current.kind != .pdf && snapshot.pdfBackground == nil) || original != nil else { return }
+                captureAI(snapshot, original, current.kind == .canvas, darkPaper)
+            }
+            .frame(minWidth: UITokens.minTouchTarget, minHeight: UITokens.minTouchTarget)
+            .disabled((notebook.kind == .pdf && pdf == nil) || missingPagePDF)
             Menu("Split view", systemImage: "rectangle.split.2x1") {
                 splitChoices()
             }

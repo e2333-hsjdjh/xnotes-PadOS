@@ -169,9 +169,11 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
             do {
                 try await AISettingsRegression.run()
                 try await AIChatRegression.run()
+                try await AIImageRegression.run()
                 if let window { try await snapshots(window: window) }
                 print("PASS AI settings native light and dark screenshots")
                 print("PASS AI chat and history native light and dark screenshots")
+                print("PASS AI image attachments and screenshot preview native screenshots")
                 exit(0)
             } catch {
                 print("FAIL AI settings regression: \(error.localizedDescription)")
@@ -213,7 +215,13 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
     var turn = AITurn(question: "请解释这个公式的含义。", model: config.defaultModel!, effort: .providerDefault)
     turn.answer = "**结论**：x^2 + y^2 = r^2 表示以原点为圆心、半径为 r 的圆。\n\n其中 x、y 为坐标，r 是半径。"
     turn.status = .completed
+    var imagePage = NotePage()
+    imagePage.text = "截图内容：x^2 + y^2 = r^2"
+    let screenshot = try NotebookPageDrawing.render(imagePage, original: nil, longestEdge: 800)
+    let attachment = try AIImagePreparation.prepare(screenshot.pngData()!)
+    turn.images = [attachment]
     record.turns = [turn]
+    record.draftImages = [attachment]
     record.model = config.defaultModel
     try history.save(record)
     let sessions = AISessions(history: history)
@@ -234,5 +242,18 @@ final class AISettingsTestScene: UIResponder, UIWindowSceneDelegate {
             try image.pngData()!.write(to: output.appending(path: "ai-\(transcript ? "chat" : "history")-\(dark ? "dark" : "light").png"))
         }
     }
+
+    let request = AIScreenshotRequest(image: PageImage(data: screenshot.pngData()!, frame: CGRect(origin: .zero, size: screenshot.size)),
+                                     documentID: UUID(), snapshot: imagePage, original: nil, canvas: false, dark: false)
+    let preview = UIHostingController(rootView: AIScreenshotPreview(request: request, sessions: sessions, attached: { _ in }))
+    window.rootViewController = preview
+    window.makeKeyAndVisible()
+    try await Task.sleep(for: .milliseconds(500))
+    preview.view.layoutIfNeeded()
+    let imageFormat = UIGraphicsImageRendererFormat(); imageFormat.scale = 1
+    let previewImage = UIGraphicsImageRenderer(bounds: window.bounds, format: imageFormat).image { _ in
+        window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+    }
+    try previewImage.pngData()!.write(to: output.appending(path: "ai-screenshot-preview.png"))
 
 }

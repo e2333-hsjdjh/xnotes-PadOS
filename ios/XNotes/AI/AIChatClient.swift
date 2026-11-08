@@ -6,13 +6,19 @@ enum AIStreamEvent: Equatable {
 
 enum AIStreamFinish { case completed, limited, filtered }
 
+struct AIChatMessage {
+    let role: String
+    let text: String
+    var images: [AIImageAttachment] = []
+}
+
 struct AICompletionRequest {
     let provider: AIProvider
     let model: String
     let effort: AIThinkingEffort
     let maxTokens: Int
     let instructions: String
-    let messages: [[String: String]]
+    let messages: [AIChatMessage]
 
     func urlRequest() throws -> URLRequest {
         try provider.validate()
@@ -24,7 +30,15 @@ struct AICompletionRequest {
         request.setValue("Bearer " + provider.key, forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        var context = messages
+        var context: [[String: Any]] = try messages.map { message in
+            guard message.images.count <= 6 else { throw AIImageError.limit }
+            for image in message.images { try image.validate() }
+            if message.images.isEmpty { return ["role": message.role, "content": message.text] }
+            let parts: [[String: Any]] = [["type": "text", "text": message.text]] + message.images.map {
+                ["type": "image_url", "image_url": ["url": "data:image/png;base64," + $0.png.base64EncodedString()]]
+            }
+            return ["role": message.role, "content": parts]
+        }
         if !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             context.insert(["role": "system", "content": instructions], at: 0)
         }

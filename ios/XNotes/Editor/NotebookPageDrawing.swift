@@ -97,7 +97,7 @@ enum NotebookPageDrawing {
 
     @MainActor
     static func render(_ page: NotePage, original: PDFPage?, longestEdge: CGFloat,
-                       canvas: Bool = false, dark: Bool = false) throws -> UIImage {
+                       canvas: Bool = false, dark: Bool = false, region: CGRect? = nil) throws -> UIImage {
         let paper: CGSize
         if canvas {
             paper = canvasSize
@@ -106,7 +106,15 @@ enum NotebookPageDrawing {
         } else {
             paper = (page.paperSize ?? .letter).dimensions
         }
-        let crop = canvas ? try canvasCrop(page) : nil
+        var crop = canvas ? try canvasCrop(page) : nil
+        if let region {
+            guard [region.minX, region.minY, region.width, region.height].allSatisfy(\.isFinite),
+                  region.minX >= 0, region.minY >= 0, region.width > 0, region.height > 0,
+                  region.maxX <= 1, region.maxY <= 1 else { throw CocoaError(.fileReadCorruptFile) }
+            let visible = crop ?? CGRect(origin: .zero, size: paper)
+            crop = CGRect(x: visible.minX + region.minX * visible.width, y: visible.minY + region.minY * visible.height,
+                          width: region.width * visible.width, height: region.height * visible.height)
+        }
         let size = crop?.size ?? paper
         let scale = longestEdge / max(size.width, size.height)
         let output = CGSize(width: max(1, size.width * scale), height: max(1, size.height * scale))

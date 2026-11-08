@@ -9,13 +9,18 @@ struct AIChatView: View {
     @State private var isVisible = false
     @State private var showingHistory = false
     @State private var showingSettings = false
+    @State private var imagePicker: AIImagePickerRequest?
+    @State private var pickerTickets: Set<AIImageImportTicket> = []
     @State private var error: String?
 
-    init(sessions: AISessions, settings: AIConfigurationStore, initialConversationID: UUID? = nil) {
+    init(sessions: AISessions, settings: AIConfigurationStore, initialConversationID: UUID? = nil, selectionChanged: @escaping (UUID?) -> Void = { _ in }) {
         self.sessions = sessions
         self.settings = settings
+        self.selectionChanged = selectionChanged
         _activeID = State(initialValue: initialConversationID)
     }
+
+    let selectionChanged: (UUID?) -> Void
 
     private var conversation: AIConversation? { sessions.conversation(activeID) }
 
@@ -42,12 +47,34 @@ struct AIChatView: View {
             .background(Color(uiColor: .systemBackground))
             .navigationTitle(conversation?.title.isEmpty == false ? Text(verbatim: conversation!.title) : Text("AI"))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Close") { sessions.releaseEmpty(activeID); dismiss() } }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button("New conversation", systemImage: "plus") { newConversation() }
                     Menu("AI options", systemImage: "ellipsis") {
                         Button("Conversation history", systemImage: "clock") { showingHistory = true }
                         Button("AI settings", systemImage: "gearshape") { showingSettings = true }
+                    }
+                }
+            }
+            .sheet(item: $imagePicker, onDismiss: {
+                let closed = pickerTickets.filter { $0.id != imagePicker?.id }
+                closed.forEach { sessions.cancelImageSelection($0) }
+                pickerTickets.subtract(closed)
+            }) { request in
+                switch request.kind {
+                case .files:
+                    AIImageFilePicker { url in
+                        if imagePicker?.id == request.id { imagePicker = nil }
+                        if let url {
+                            sessions.importImage(request.ticket) {
+                                try await Task.detached { try AIImagePreparation.read(url) }.value
+                            }
+                        }
+                    }
+                case .photos:
+                    AIImagePhotoPicker { provider in
+                        if imagePicker?.id == request.id { imagePicker = nil }
+                        if let provider { sessions.importImage(request.ticket) { try await AIPhotoTransfer.read(provider) } }
                     }
                 }
             }
@@ -65,12 +92,12 @@ struct AIChatView: View {
             } message: { Text(error ?? sessions.issue ?? "") }
             .onAppear {
                 isVisible = true
-                if conversation == nil { newConversation() }
+                if conversation == nil || conversation?.trashedAt != nil { newConversation() }
+                selectionChanged(activeID)
                 sessions.purgeExpiredTrash(days: retentionDays)
             }
-            .onDisappear {
-                if !showingHistory && !showingSettings { isVisible = false; sessions.releaseEmpty(activeID) }
-            }
+            .onDisappear { isVisible = false }
+            .onChange(of: activeID) { _, id in selectionChanged(id) }
             .onChange(of: conversation?.trashedAt) { _, value in
                 if isVisible && value != nil { newConversation() }
             }
@@ -83,6 +110,19 @@ struct AIChatView: View {
 
     private func composer(_ conversation: AIConversation) -> some View {
         VStack(alignment: .leading) {
+            if let images = conversation.draftImages, !images.isEmpty {
+                AIImageStrip(images: images, remove: { imageID in perform { try sessions.removeImage(conversation.id, imageID: imageID) } })
+            }
+            if sessions.imageImportCounts[conversation.id, default: 0] > 0 {
+                HStack {
+                    ProgressView("Importing image…")
+                    Button("Cancel image imports") { sessions.cancelImageImports(conversation.id) }
+                }
+            }
+            if let error = sessions.imageImportErrors[conversation.id] {
+                Text(error).foregroundStyle(UITokens.secondaryText)
+                Button("Discard failed image import") { sessions.discardImageImportError(conversation.id) }
+            }
             HStack {
                 Menu {
                     ForEach(settings.configuration.providers) { provider in
@@ -110,6 +150,22 @@ struct AIChatView: View {
                 .accessibilityLabel(Text("Thinking depth"))
                 .frame(minHeight: UITokens.minTouchTarget)
                 .disabled(conversation.isRunning)
+                Menu("Attach image", systemImage: "photo.badge.plus") {
+                    Button("From photo library") {
+                        if let ticket = sessions.beginImageSelection(conversation.id) {
+                            pickerTickets.insert(ticket)
+                            imagePicker = AIImagePickerRequest(ticket: ticket, kind: .photos)
+                        }
+                    }
+                    Button("From files") {
+                        if let ticket = sessions.beginImageSelection(conversation.id) {
+                            pickerTickets.insert(ticket)
+                            imagePicker = AIImagePickerRequest(ticket: ticket, kind: .files)
+                        }
+                    }
+                }
+                .frame(minHeight: UITokens.minTouchTarget)
+                .disabled((conversation.draftImages?.count ?? 0) + sessions.imageImportCounts[conversation.id, default: 0] >= 6)
                 Spacer()
                 if conversation.isRunning {
                     Button("Stop", systemImage: "stop.fill") { sessions.stop(conversation.id) }
@@ -117,7 +173,7 @@ struct AIChatView: View {
                 } else {
                     Button("Send", systemImage: "arrow.up") { perform { try sessions.send(conversation.id, configuration: settings.configuration) } }
                         .frame(minHeight: UITokens.minTouchTarget)
-                        .disabled(conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || settings.loadIssue != nil)
+                        .disabled((conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && conversation.draftImages?.isEmpty != false) || settings.loadIssue != nil || sessions.imageImportCounts[conversation.id, default: 0] > 0 || sessions.imageImportErrors[conversation.id] != nil)
                 }
             }
             TextField("Message AI", text: Binding(get: { sessions.conversation(conversation.id)?.draft ?? "" }, set: {
@@ -134,7 +190,8 @@ struct AIChatView: View {
     private func turnView(_ turn: AITurn) -> some View {
         VStack(alignment: .leading) {
             Text("You").bold()
-            Text(verbatim: turn.question).textSelection(.enabled)
+            if let images = turn.images, !images.isEmpty { AIImageStrip(images: images) }
+            if !turn.question.isEmpty { Text(verbatim: turn.question).textSelection(.enabled) }
             Divider()
             Text("AI").bold()
             if !turn.answer.isEmpty { Text(markdown(turn.answer)).textSelection(.enabled) }

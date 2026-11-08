@@ -45,7 +45,7 @@ enum AIChatRegression {
         for byte in "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"length\"}]}\n\n".utf8 { _ = try length.append(byte) }
         _ = try length.end()
         precondition(length.finish == .limited)
-        let input = AICompletionRequest(provider: provider, model: "chat", effort: .high, maxTokens: 4096, instructions: "custom", messages: [["role": "user", "content": "hello"]])
+        let input = AICompletionRequest(provider: provider, model: "chat", effort: .high, maxTokens: 4096, instructions: "custom", messages: [AIChatMessage(role: "user", text: "hello")])
         let request = try input.urlRequest()
         let body = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
         precondition(body["reasoning_effort"] as? String == "high")
